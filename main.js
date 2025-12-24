@@ -1,20 +1,20 @@
-const express = require('express');
-const { ethers } = require('ethers');
-const solc = require('solc');
-const axios = require('axios');
-const FormData = require('form-data');
-const OpenAI = require('openai');
-const YieldCalculatorTool = require('./yieldCalculator');
-require('dotenv').config();
+const express = require("express");
+const { ethers } = require("ethers");
+const solc = require("solc");
+const axios = require("axios");
+const FormData = require("form-data");
+const OpenAI = require("openai");
+const YieldCalculatorTool = require("./yieldCalculator");
+require("dotenv").config();
 
 const app = express();
 app.use(express.json());
 
-// Somnia Testnet RPC URL
-const SOMNIA_TESTNET_RPC = 'https://dream-rpc.somnia.network';
+// Arbitrum Sepolia RPC URL
+const ARBITRUM_SEPOLIA_RPC = "https://sepolia-rollup.arbitrum.io/rpc";
 
 // TokenFactory Contract Address
-const FACTORY_ADDRESS = '0x19Fae13F4C2fac0539b5E0baC8Ad1785f1C7dEE1';
+const FACTORY_ADDRESS = "0x19Fae13F4C2fac0539b5E0baC8Ad1785f1C7dEE1";
 
 // TokenFactory ABI
 const FACTORY_ABI = [
@@ -24,53 +24,75 @@ const FACTORY_ABI = [
   "function getLatestTokens(uint256 count) view returns (address[])",
   "function getAllDeployedTokens() view returns (address[])",
   "function getTokenInfo(address tokenAddress) view returns (address creator, string name, string symbol, uint256 initialSupply, uint256 deployedAt, uint256 currentSupply, address owner)",
-  "event TokenCreated(address indexed tokenAddress, address indexed creator, string name, string symbol, uint256 initialSupply, uint256 timestamp)"
+  "event TokenCreated(address indexed tokenAddress, address indexed creator, string name, string symbol, uint256 initialSupply, uint256 timestamp)",
 ];
 
 // NFTFactory Contract Address
-const NFT_FACTORY_ADDRESS = '0x83B831848eE0A9a2574Cf62a13c23d8eDCa84E9F';
+const NFT_FACTORY_ADDRESS = "0x83B831848eE0A9a2574Cf62a13c23d8eDCa84E9F";
 
 // NFTFactory ABI
 const NFT_FACTORY_ABI = [
   "function createCollection(string memory name, string memory symbol, string memory baseURI) external returns (address)",
   "function getCollectionsByCreator(address creator) external view returns (address[] memory)",
   "function getCollectionInfo(address collectionAddress) external view returns (address creator, string memory name, string memory symbol, string memory baseURI, uint256 deployedAt, uint256 totalMinted, address owner)",
-  "event CollectionCreated(address indexed collectionAddress, address indexed creator, string name, string symbol, string baseURI, uint256 timestamp)"
+  "event CollectionCreated(address indexed collectionAddress, address indexed creator, string name, string symbol, string baseURI, uint256 timestamp)",
 ];
 
-// DAOFactory Contract Address
-const DAO_FACTORY_ADDRESS = '0xc6D49E765576134495ee49e572d5cBCb83a330Dc';
+// DAO Contract Address (Arbitrum Sepolia - Template/Instance)
+const DAO_CONTRACT_ADDRESS = "0x95d7bc3f2f8172298c2487dfeca23d86b09572f5";
 
-// DAOFactory ABI
+// DAOFactory Contract Address (Arbitrum Sepolia)
+const DAO_FACTORY_ADDRESS = "0xf4242a5bebdd12abc7d01ab9fd3f7473b3295d46";
+
+// DAOFactory ABI (Arbitrum Stylus)
 const DAO_FACTORY_ABI = [
-  "function createDAO(string memory _name, uint256 _votingPeriod, uint256 _quorumPercentage) external returns (address)",
-  "function getDAOCount() external view returns (uint256)",
-  "function getCreatorDAOs(address _creator) external view returns (address[] memory)",
-  "function getAllDAOs() external view returns (address[] memory)",
-  "event DAOCreated(address indexed daoAddress, string name, address indexed creator, uint256 votingPeriod, uint256 quorumPercentage, uint256 timestamp)"
+  "function registerDao(address dao_address, string name, uint256 voting_period, uint256 quorum_percentage)",
+  "function getDaoCount() view returns (uint256)",
+  "function getAllDaos() view returns (address[])",
+  "function getCreatorDaos(address creator) view returns (address[])",
+  "event DAOCreated(address indexed daoAddress, string name, address indexed creator, uint256 votingPeriod, uint256 quorumPercentage)",
 ];
 
-// DAO ABI (for interacting with created DAOs)
+// DAO ABI (Arbitrum Stylus)
 const DAO_ABI = [
-  "function name() external view returns (string memory)",
-  "function owner() external view returns (address)",
-  "function memberCount() external view returns (uint256)",
-  "function votingPeriod() external view returns (uint256)",
-  "function quorumPercentage() external view returns (uint256)",
-  "function proposalCount() external view returns (uint256)",
-  "function getTotalVotingPower() public view returns (uint256)",
-  "function getAllMembers() external view returns (address[] memory)",
-  "function getMemberInfo(address _member) external view returns (bool isMember, uint256 votingPower, uint256 joinedAt)"
+  "function init(string name, address creator, uint256 voting_period, uint256 quorum_percentage)",
+  "function name() view returns (string)",
+  "function creator() view returns (address)",
+  "function proposalCount() view returns (uint256)",
+  "function memberCount() view returns (uint256)",
+  "function votingPeriod() view returns (uint256)",
+  "function quorumPercentage() view returns (uint256)",
+  "function addMember(address member, uint256 voting_power)",
+  "function removeMember(address member)",
+  "function createProposal(string description) returns (uint256)",
+  "function vote(uint256 proposal_id, bool support)",
+  "function executeProposal(uint256 proposal_id)",
+  "function getTotalVotingPower() view returns (uint256)",
+  "function getProposalInfo(uint256 proposal_id) view returns (string memory, address, uint256, uint256, uint256, bool, bool)",
+  "event MemberAdded(address indexed member, uint256 votingPower)",
+  "event MemberRemoved(address indexed member)",
+  "event ProposalCreated(uint256 indexed proposalId, string description, address proposer)",
+  "event VoteCast(uint256 indexed proposalId, address indexed voter, bool support, uint256 weight)",
+  "event ProposalExecuted(uint256 indexed proposalId, bool passed)",
 ];
 
-// Airdrop Contract Address
-const AIRDROP_CONTRACT_ADDRESS = '0x70F3147fa7971033312911a59579f18Ff0FE26F9';
+// Airdrop Contract Address (Arbitrum Sepolia)
+const AIRDROP_CONTRACT_ADDRESS = "0x6239a115e23a11033930c1892eb6b67649c12f18";
 
-// Airdrop Contract ABI
+// Yield Calculator Contract Address (Arbitrum Sepolia)
+const YIELD_CALCULATOR_ADDRESS = "0x70f749501b44ea186550dfca4e9f87a5d120bb4d";
+
+// Airdrop Contract ABI (Arbitrum Stylus)
 const AIRDROP_ABI = [
-  "function airdrop(address[] calldata recipients, uint256 amount) payable",
+  "function owner() view returns (address)",
+  "function init()",
+  "function transferOwnership(address new_owner)",
+  "function airdrop(address[] memory recipients, uint256 amount) payable",
+  "function airdropWithAmounts(address[] memory recipients, uint256[] memory amounts) payable",
+  "function withdraw(address to)",
   "function getBalance() view returns (uint256)",
-  "event AirdropExecuted(address indexed executor, address[] recipients, uint256 amount, uint256 totalAmount, uint256 timestamp)"
+  "event AirdropExecuted(address indexed executor, address[] recipients, uint256 amount, uint256 totalAmount, uint256 timestamp)",
+  "event OwnershipTransferred(address indexed previousOwner, address indexed newOwner)",
 ];
 
 // ERC20 Token Contract Source
@@ -178,108 +200,166 @@ contract CustomToken {
 // Compile Solidity contract
 function compileContract() {
   const input = {
-    language: 'Solidity',
+    language: "Solidity",
     sources: {
-      'CustomToken.sol': {
-        content: TOKEN_CONTRACT_SOURCE
-      }
+      "CustomToken.sol": {
+        content: TOKEN_CONTRACT_SOURCE,
+      },
     },
     settings: {
       optimizer: {
         enabled: false,
-        runs: 200
+        runs: 200,
       },
       outputSelection: {
-        '*': {
-          '*': ['abi', 'evm.bytecode']
-        }
-      }
-    }
+        "*": {
+          "*": ["abi", "evm.bytecode"],
+        },
+      },
+    },
   };
 
   const output = JSON.parse(solc.compile(JSON.stringify(input)));
-  
+
   // Log compilation warnings
   if (output.errors) {
-    const warnings = output.errors.filter(e => e.severity === 'warning');
+    const warnings = output.errors.filter((e) => e.severity === "warning");
     if (warnings.length > 0) {
-      console.warn('Compilation warnings:', warnings);
+      console.warn("Compilation warnings:", warnings);
     }
-    
-    const errors = output.errors.filter(e => e.severity === 'error');
+
+    const errors = output.errors.filter((e) => e.severity === "error");
     if (errors.length > 0) {
-      throw new Error('Compilation failed: ' + JSON.stringify(errors, null, 2));
+      throw new Error("Compilation failed: " + JSON.stringify(errors, null, 2));
     }
   }
 
-  if (!output.contracts || !output.contracts['CustomToken.sol'] || !output.contracts['CustomToken.sol']['CustomToken']) {
-    throw new Error('Contract not found in compilation output');
+  if (
+    !output.contracts ||
+    !output.contracts["CustomToken.sol"] ||
+    !output.contracts["CustomToken.sol"]["CustomToken"]
+  ) {
+    throw new Error("Contract not found in compilation output");
   }
 
-  const contract = output.contracts['CustomToken.sol']['CustomToken'];
-  
+  const contract = output.contracts["CustomToken.sol"]["CustomToken"];
+
   if (!contract.abi) {
-    throw new Error('ABI not found in compilation output');
+    throw new Error("ABI not found in compilation output");
   }
-  
-  if (!contract.evm || !contract.evm.bytecode || !contract.evm.bytecode.object) {
-    throw new Error('Bytecode not found in compilation output');
+
+  if (
+    !contract.evm ||
+    !contract.evm.bytecode ||
+    !contract.evm.bytecode.object
+  ) {
+    throw new Error("Bytecode not found in compilation output");
   }
 
   let bytecode = contract.evm.bytecode.object;
-  
+
   // Ensure bytecode has 0x prefix
-  if (!bytecode.startsWith('0x')) {
-    bytecode = '0x' + bytecode;
+  if (!bytecode.startsWith("0x")) {
+    bytecode = "0x" + bytecode;
   }
-  
-  if (bytecode === '0x' || bytecode.length < 4) {
-    throw new Error('Invalid bytecode generated');
+
+  if (bytecode === "0x" || bytecode.length < 4) {
+    throw new Error("Invalid bytecode generated");
   }
 
   return {
     abi: contract.abi,
-    bytecode: bytecode
+    bytecode: bytecode,
   };
 }
 
-app.post('/transfer', async (req, res) => {
+app.post("/transfer", async (req, res) => {
   try {
     const { privateKey, toAddress, amount, tokenAddress } = req.body;
 
+    // Validation
     if (!privateKey || !toAddress || !amount) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields: privateKey, toAddress, amount'
+        error: "Missing required fields: privateKey, toAddress, amount",
       });
     }
 
-    const provider = new ethers.JsonRpcProvider(SOMNIA_TESTNET_RPC);
+    // Validate address format
+    if (!ethers.isAddress(toAddress)) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid recipient address format",
+      });
+    }
+
+    // Validate amount
+    const amountNum = parseFloat(amount);
+    if (isNaN(amountNum) || amountNum <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: "Amount must be a positive number",
+      });
+    }
+
+    const provider = new ethers.JsonRpcProvider(ARBITRUM_SEPOLIA_RPC);
     const wallet = new ethers.Wallet(privateKey, provider);
+
+    // Check native balance for gas fees
+    const nativeBalance = await provider.getBalance(wallet.address);
+    if (nativeBalance === 0n) {
+      return res.status(400).json({
+        success: false,
+        error: "Insufficient native token balance for gas fees",
+        currentBalance: ethers.formatEther(nativeBalance),
+        network: "Arbitrum Sepolia",
+      });
+    }
 
     // If tokenAddress is provided, transfer ERC20 tokens
     if (tokenAddress) {
-      console.log('Transferring ERC20 token:', tokenAddress);
-      
+      // Validate token address format
+      if (!ethers.isAddress(tokenAddress)) {
+        return res.status(400).json({
+          success: false,
+          error: "Invalid token address format",
+        });
+      }
+
+      console.log(
+        "Transferring ERC20 token on Arbitrum Sepolia:",
+        tokenAddress
+      );
+
       // ERC20 Token ABI for transfer
       const TOKEN_ABI = [
-        'function transfer(address to, uint256 amount) returns (bool)',
-        'function balanceOf(address account) view returns (uint256)',
-        'function decimals() view returns (uint8)',
-        'function symbol() view returns (string)',
-        'function name() view returns (string)'
+        "function transfer(address to, uint256 amount) returns (bool)",
+        "function balanceOf(address account) view returns (uint256)",
+        "function decimals() view returns (uint8)",
+        "function symbol() view returns (string)",
+        "function name() view returns (string)",
       ];
 
-      const tokenContract = new ethers.Contract(tokenAddress, TOKEN_ABI, wallet);
+      const tokenContract = new ethers.Contract(
+        tokenAddress,
+        TOKEN_ABI,
+        wallet
+      );
 
       // Get token decimals
       let decimals;
+      let tokenSymbol = "TOKEN";
+      let tokenName = "Token";
       try {
         decimals = await tokenContract.decimals();
+        tokenSymbol = await tokenContract.symbol().catch(() => "TOKEN");
+        tokenName = await tokenContract.name().catch(() => "Token");
       } catch (error) {
         return res.status(400).json({
           success: false,
-          error: 'Invalid token address or token does not support decimals()'
+          error:
+            "Invalid token address or token does not support required functions",
+          details: error.message,
         });
       }
 
@@ -289,28 +369,61 @@ app.post('/transfer', async (req, res) => {
       // Check token balance
       const tokenBalance = await tokenContract.balanceOf(wallet.address);
       if (tokenBalance < amountInWei) {
-        const tokenSymbol = await tokenContract.symbol().catch(() => 'TOKEN');
         return res.status(400).json({
           success: false,
-          error: 'Insufficient token balance',
+          error: "Insufficient token balance",
           tokenAddress: tokenAddress,
           tokenSymbol: tokenSymbol,
           currentBalance: ethers.formatUnits(tokenBalance, decimals),
-          requestedAmount: amount.toString()
+          requestedAmount: amount.toString(),
         });
       }
 
+      // Estimate gas before transfer
+      let gasEstimate;
+      let gasLimit;
+      try {
+        gasEstimate = await tokenContract.transfer.estimateGas(
+          toAddress,
+          amountInWei
+        );
+        // Add 20% buffer for Arbitrum
+        gasLimit = (gasEstimate * 120n) / 100n;
+        console.log(
+          `Estimated gas: ${gasEstimate.toString()}, Using: ${gasLimit.toString()}`
+        );
+      } catch (estimateError) {
+        console.warn(
+          "Gas estimation failed, proceeding without gas limit:",
+          estimateError.message
+        );
+        gasLimit = null;
+      }
+
       // Transfer tokens
-      console.log(`Transferring ${amount} tokens (${amountInWei.toString()} with ${decimals} decimals)`);
-      const tx = await tokenContract.transfer(toAddress, amountInWei);
+      console.log(
+        `Transferring ${amount} ${tokenSymbol} (${amountInWei.toString()} with ${decimals} decimals) on Arbitrum Sepolia`
+      );
+
+      const txOptions = {};
+      if (gasLimit) {
+        txOptions.gasLimit = gasLimit;
+      }
+
+      const tx = await tokenContract.transfer(
+        toAddress,
+        amountInWei,
+        txOptions
+      );
+      console.log(`Transaction sent: ${tx.hash}`);
       const receipt = await tx.wait();
 
-      const tokenSymbol = await tokenContract.symbol().catch(() => 'TOKEN');
-      const tokenName = await tokenContract.name().catch(() => 'Token');
+      console.log(`✅ Transfer confirmed in block: ${receipt.blockNumber}`);
 
       return res.json({
         success: true,
-        type: 'ERC20',
+        type: "ERC20",
+        network: "Arbitrum Sepolia",
         transactionHash: receipt.hash,
         from: wallet.address,
         to: toAddress,
@@ -318,23 +431,98 @@ app.post('/transfer', async (req, res) => {
         tokenName: tokenName,
         tokenSymbol: tokenSymbol,
         amount: amount,
+        amountWei: amountInWei.toString(),
+        decimals: Number(decimals),
         blockNumber: receipt.blockNumber,
         gasUsed: receipt.gasUsed.toString(),
-        explorerUrl: `https://shannon-explorer.somnia.network/tx/${receipt.hash}`
+        gasPrice: receipt.gasPrice ? receipt.gasPrice.toString() : null,
+        explorerUrl: `https://sepolia.arbiscan.io/tx/${receipt.hash}`,
       });
     }
 
-    // Native token transfer (original behavior)
-    console.log('Transferring native token (STT)');
+    // Native token transfer (ETH/STT on Arbitrum Sepolia)
+    console.log("Transferring native token (ETH/STT) on Arbitrum Sepolia");
     const balance = await provider.getBalance(wallet.address);
     const amountInWei = ethers.parseEther(amount.toString());
 
-    if (balance < amountInWei) {
+    // Check if balance is sufficient (including gas)
+    const feeData = await provider.getFeeData();
+    const estimatedGasPrice = feeData.gasPrice || feeData.maxFeePerGas || 0n;
+    const estimatedGasCost = estimatedGasPrice * 21000n; // Base gas for simple transfer
+
+    if (balance < amountInWei + estimatedGasCost) {
       return res.status(400).json({
         success: false,
-        error: 'Insufficient balance',
-        currentBalance: ethers.formatEther(balance)
+        error: "Insufficient balance (including gas fees)",
+        currentBalance: ethers.formatEther(balance),
+        requestedAmount: amount,
+        estimatedGasCost: ethers.formatEther(estimatedGasCost),
+        network: "Arbitrum Sepolia",
       });
+    }
+
+    // Check if recipient is a contract address
+    const code = await provider.getCode(toAddress);
+    const isContract = code && code !== "0x";
+
+    if (isContract) {
+      // Check if contract can receive native tokens by attempting a small call
+      try {
+        // Try to estimate gas with a small test amount to see if contract accepts native tokens
+        await provider.estimateGas({
+          to: toAddress,
+          value: 1n, // Test with 1 wei
+          from: wallet.address,
+        });
+        console.log("Contract appears to accept native token transfers");
+      } catch (contractError) {
+        return res.status(400).json({
+          success: false,
+          error: "Cannot send native tokens to this contract address",
+          details:
+            "The recipient address is a contract that does not accept native token transfers. Use the tokenAddress parameter to transfer ERC20 tokens instead.",
+          recipientAddress: toAddress,
+          isContract: true,
+          suggestion:
+            "If you want to transfer tokens, include the 'tokenAddress' parameter in your request",
+          network: "Arbitrum Sepolia",
+        });
+      }
+    }
+
+    // Estimate gas for native transfer
+    let gasEstimate;
+    try {
+      gasEstimate = await provider.estimateGas({
+        to: toAddress,
+        value: amountInWei,
+        from: wallet.address,
+      });
+      console.log(
+        `Estimated gas for native transfer: ${gasEstimate.toString()}`
+      );
+    } catch (estimateError) {
+      // If gas estimation fails, provide helpful error message
+      if (
+        estimateError.reason &&
+        estimateError.reason.includes("require(false)")
+      ) {
+        return res.status(400).json({
+          success: false,
+          error:
+            "Transaction would fail - recipient cannot receive native tokens",
+          details:
+            "The recipient address may be a contract that rejects native token transfers, or there may be insufficient balance for gas fees.",
+          recipientAddress: toAddress,
+          isContract: isContract,
+          suggestion: isContract
+            ? "If transferring tokens, use the 'tokenAddress' parameter. If sending to a contract, ensure it has a payable receive() or fallback() function."
+            : "Ensure the recipient address is correct and can receive native tokens.",
+          network: "Arbitrum Sepolia",
+        });
+      }
+      console.warn("Gas estimation failed:", estimateError.message);
+      gasEstimate = null;
     }
 
     const tx = {
@@ -342,67 +530,109 @@ app.post('/transfer', async (req, res) => {
       value: amountInWei,
     };
 
-    const transactionResponse = await wallet.sendTransaction(tx);
-    const receipt = await transactionResponse.wait();
+    if (gasEstimate) {
+      tx.gasLimit = (gasEstimate * 120n) / 100n; // Add 20% buffer
+    }
 
-    return res.json({
-      success: true,
-      type: 'native',
-      transactionHash: receipt.hash,
-      from: wallet.address,
-      to: toAddress,
-      amount: amount,
-      blockNumber: receipt.blockNumber,
-      gasUsed: receipt.gasUsed.toString(),
-      explorerUrl: `https://shannon-explorer.somnia.network/tx/${receipt.hash}`
-    });
+    try {
+      const transactionResponse = await wallet.sendTransaction(tx);
+      console.log(`Transaction sent: ${transactionResponse.hash}`);
+      const receipt = await transactionResponse.wait();
+      console.log(`✅ Transfer confirmed in block: ${receipt.blockNumber}`);
 
+      return res.json({
+        success: true,
+        type: "native",
+        network: "Arbitrum Sepolia",
+        transactionHash: receipt.hash,
+        from: wallet.address,
+        to: toAddress,
+        amount: amount,
+        amountWei: amountInWei.toString(),
+        blockNumber: receipt.blockNumber,
+        gasUsed: receipt.gasUsed.toString(),
+        gasPrice: receipt.gasPrice ? receipt.gasPrice.toString() : null,
+        explorerUrl: `https://sepolia.arbiscan.io/tx/${receipt.hash}`,
+      });
+    } catch (txError) {
+      // Handle transaction errors specifically
+      if (txError.reason && txError.reason.includes("require(false)")) {
+        return res.status(400).json({
+          success: false,
+          error:
+            "Transaction reverted - recipient cannot receive native tokens",
+          details:
+            "The recipient contract does not accept native token transfers.",
+          recipientAddress: toAddress,
+          suggestion:
+            "Use the 'tokenAddress' parameter to transfer ERC20 tokens instead",
+          network: "Arbitrum Sepolia",
+        });
+      }
+      throw txError; // Re-throw to be caught by outer catch
+    }
   } catch (error) {
-    console.error('Transfer error:', error);
+    console.error("Transfer error:", error);
+
+    // Provide more specific error messages
+    if (error.reason && error.reason.includes("require(false)")) {
+      return res.status(400).json({
+        success: false,
+        error: "Transaction would fail",
+        details:
+          "The transaction would revert. This usually means the recipient cannot receive native tokens or there's insufficient balance.",
+        recipientAddress: toAddress,
+        suggestion:
+          "If sending to a contract, ensure it accepts native tokens. If transferring tokens, use the 'tokenAddress' parameter.",
+        network: "Arbitrum Sepolia",
+      });
+    }
+
     return res.status(500).json({
       success: false,
       error: error.message,
-      details: error.reason || error.code
+      details: error.reason || error.code,
+      network: "Arbitrum Sepolia",
     });
   }
 });
 
 // Deploy ERC20 Token endpoint using TokenFactory
-app.post('/deploy-token', async (req, res) => {
+app.post("/deploy-token", async (req, res) => {
   try {
-    const { 
-      privateKey, 
-      name, 
-      symbol, 
-      initialSupply 
-    } = req.body;
+    const { privateKey, name, symbol, initialSupply } = req.body;
 
     // Validation
     if (!privateKey || !name || !symbol || !initialSupply) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields: privateKey, name, symbol, initialSupply'
+        error:
+          "Missing required fields: privateKey, name, symbol, initialSupply",
       });
     }
 
-    const provider = new ethers.JsonRpcProvider(SOMNIA_TESTNET_RPC);
+    const provider = new ethers.JsonRpcProvider(ARBITRUM_SEPOLIA_RPC);
     const wallet = new ethers.Wallet(privateKey, provider);
 
     // Check balance for gas
     const balance = await provider.getBalance(wallet.address);
-    console.log('Wallet balance:', ethers.formatEther(balance), 'STT');
-    
+    console.log("Wallet balance:", ethers.formatEther(balance), "STT");
+
     if (balance === 0n) {
       return res.status(400).json({
         success: false,
-        error: 'Insufficient balance for gas fees',
+        error: "Insufficient balance for gas fees",
         currentBalance: ethers.formatEther(balance),
-        required: 'Some testnet tokens for gas'
+        required: "Some testnet tokens for gas",
       });
     }
 
-    console.log('Creating token via TokenFactory:', { name, symbol, initialSupply });
-    console.log('Factory address:', FACTORY_ADDRESS);
+    console.log("Creating token via TokenFactory:", {
+      name,
+      symbol,
+      initialSupply,
+    });
+    console.log("Factory address:", FACTORY_ADDRESS);
 
     // Connect to TokenFactory contract
     const factory = new ethers.Contract(FACTORY_ADDRESS, FACTORY_ABI, wallet);
@@ -411,64 +641,83 @@ app.post('/deploy-token', async (req, res) => {
     const initialSupplyBigInt = BigInt(initialSupply.toString());
 
     // Estimate gas before sending transaction (for logging and optional gas limit)
-    console.log('Estimating gas for createToken...');
+    console.log("Estimating gas for createToken...");
     let gasEstimate;
     let estimatedCost = null;
     try {
-      gasEstimate = await factory.createToken.estimateGas(name, symbol, initialSupplyBigInt);
-      console.log('Estimated gas:', gasEstimate.toString());
-      
+      gasEstimate = await factory.createToken.estimateGas(
+        name,
+        symbol,
+        initialSupplyBigInt
+      );
+      console.log("Estimated gas:", gasEstimate.toString());
+
       // Get current gas price for informational purposes only
       const feeData = await provider.getFeeData();
       const gasPrice = feeData.gasPrice || feeData.maxFeePerGas;
-      
+
       if (gasPrice && gasPrice > 0n) {
         estimatedCost = gasEstimate * gasPrice;
-        console.log('Estimated transaction cost:', ethers.formatEther(estimatedCost), 'STT');
-        console.log('Gas price:', ethers.formatUnits(gasPrice, 'gwei'), 'gwei');
-        
+        console.log(
+          "Estimated transaction cost:",
+          ethers.formatEther(estimatedCost),
+          "STT"
+        );
+        console.log("Gas price:", ethers.formatUnits(gasPrice, "gwei"), "gwei");
+
         // Only warn if balance seems insufficient, but don't block the transaction
         // Let the network reject it if truly insufficient
         if (balance < estimatedCost) {
-          console.warn('⚠️  Warning: Balance may be insufficient for transaction');
-          console.warn('   Balance:', ethers.formatEther(balance), 'STT');
-          console.warn('   Estimated cost:', ethers.formatEther(estimatedCost), 'STT');
+          console.warn(
+            "⚠️  Warning: Balance may be insufficient for transaction"
+          );
+          console.warn("   Balance:", ethers.formatEther(balance), "STT");
+          console.warn(
+            "   Estimated cost:",
+            ethers.formatEther(estimatedCost),
+            "STT"
+          );
           // Continue anyway - let the transaction fail naturally if needed
         }
       }
     } catch (estimateError) {
-      console.warn('Gas estimation failed (will proceed anyway):', estimateError.message);
+      console.warn(
+        "Gas estimation failed (will proceed anyway):",
+        estimateError.message
+      );
       // If estimation fails, we'll still try to send - ethers will handle it
       gasEstimate = null;
     }
 
     // Create token via factory with estimated gas
-    console.log('Sending createToken transaction...');
+    console.log("Sending createToken transaction...");
     let tx;
     if (gasEstimate) {
       // Add 20% buffer to gas estimate
       const gasLimit = (gasEstimate * 120n) / 100n;
-      console.log('Using gas limit:', gasLimit.toString());
-      tx = await factory.createToken(name, symbol, initialSupplyBigInt, { gasLimit });
+      console.log("Using gas limit:", gasLimit.toString());
+      tx = await factory.createToken(name, symbol, initialSupplyBigInt, {
+        gasLimit,
+      });
     } else {
       // Let ethers estimate automatically if our estimation failed
       tx = await factory.createToken(name, symbol, initialSupplyBigInt);
     }
-    console.log('Transaction hash:', tx.hash);
-    console.log('Waiting for confirmation...');
+    console.log("Transaction hash:", tx.hash);
+    console.log("Waiting for confirmation...");
 
     // Wait for the transaction to be mined
     const receipt = await tx.wait();
-    console.log('Transaction confirmed in block:', receipt.blockNumber);
+    console.log("Transaction confirmed in block:", receipt.blockNumber);
 
     // Parse the TokenCreated event to get the token address
     const factoryInterface = new ethers.Interface(FACTORY_ABI);
     let newTokenAddress = null;
-    
+
     for (const log of receipt.logs) {
       try {
         const parsedLog = factoryInterface.parseLog(log);
-        if (parsedLog && parsedLog.name === 'TokenCreated') {
+        if (parsedLog && parsedLog.name === "TokenCreated") {
           newTokenAddress = parsedLog.args.tokenAddress;
           break;
         }
@@ -478,63 +727,87 @@ app.post('/deploy-token', async (req, res) => {
     }
 
     if (!newTokenAddress) {
-      throw new Error('TokenCreated event not found in transaction receipt. Token creation may have failed.');
+      throw new Error(
+        "TokenCreated event not found in transaction receipt. Token creation may have failed."
+      );
     }
 
-    console.log('Token created at address:', newTokenAddress);
+    console.log("Token created at address:", newTokenAddress);
 
     // IMPORTANT: The tokens are minted to the factory contract, not the creator
     // We need to check the factory's balance and transfer tokens to the creator
     const TOKEN_ABI = [
-      'function transfer(address to, uint256 amount) returns (bool)',
-      'function balanceOf(address account) view returns (uint256)',
-      'function decimals() view returns (uint8)',
-      'function symbol() view returns (string)',
-      'function owner() view returns (address)',
-      'function mint(address to, uint256 amount) returns ()'
+      "function transfer(address to, uint256 amount) returns (bool)",
+      "function balanceOf(address account) view returns (uint256)",
+      "function decimals() view returns (uint8)",
+      "function symbol() view returns (string)",
+      "function owner() view returns (address)",
+      "function mint(address to, uint256 amount) returns ()",
     ];
-    
-    const tokenContract = new ethers.Contract(newTokenAddress, TOKEN_ABI, wallet);
-    
+
+    const tokenContract = new ethers.Contract(
+      newTokenAddress,
+      TOKEN_ABI,
+      wallet
+    );
+
     // Check factory's token balance
     const factoryBalance = await tokenContract.balanceOf(FACTORY_ADDRESS);
     const tokenDecimals = await tokenContract.decimals().catch(() => 18);
-    const expectedSupply = BigInt(initialSupply.toString()) * (10n ** BigInt(tokenDecimals));
-    
-    console.log(`Factory token balance: ${ethers.formatUnits(factoryBalance, tokenDecimals)}`);
-    console.log(`Expected supply: ${ethers.formatUnits(expectedSupply, tokenDecimals)}`);
-    
+    const expectedSupply =
+      BigInt(initialSupply.toString()) * 10n ** BigInt(tokenDecimals);
+
+    console.log(
+      `Factory token balance: ${ethers.formatUnits(
+        factoryBalance,
+        tokenDecimals
+      )}`
+    );
+    console.log(
+      `Expected supply: ${ethers.formatUnits(expectedSupply, tokenDecimals)}`
+    );
+
     // Try to transfer tokens from factory to creator
     // Since the factory owns the tokens initially, we need to use the owner's mint function
     // OR if the factory has a way to transfer, we'd use that
     // For now, check if creator is owner and can mint (though this increases supply)
     let transferSuccess = false;
     let transferTxHash = null;
-    
+
     try {
       const tokenOwner = await tokenContract.owner();
       console.log(`Token owner: ${tokenOwner}`);
       console.log(`Creator wallet: ${wallet.address}`);
-      
+
       if (tokenOwner.toLowerCase() === wallet.address.toLowerCase()) {
         // Creator is the owner - we can mint new tokens to the creator
         // But this increases total supply, so we'll check if factory has tokens first
         if (factoryBalance > 0n) {
-          console.log('⚠️  Tokens are in factory contract. Attempting to use mint function...');
+          console.log(
+            "⚠️  Tokens are in factory contract. Attempting to use mint function..."
+          );
           // Note: Minting will increase total supply, but it's the only way without modifying factory
           // Actually, we can't transfer from factory without factory's approval
           // So we'll mint equivalent tokens to creator
-          const mintTx = await tokenContract.mint(wallet.address, initialSupplyBigInt);
+          const mintTx = await tokenContract.mint(
+            wallet.address,
+            initialSupplyBigInt
+          );
           const mintReceipt = await mintTx.wait();
           transferSuccess = true;
           transferTxHash = mintReceipt.hash;
-          console.log(`✅ Minted ${initialSupply} tokens to creator: ${mintReceipt.hash}`);
+          console.log(
+            `✅ Minted ${initialSupply} tokens to creator: ${mintReceipt.hash}`
+          );
         }
       } else {
-        console.log('⚠️  Creator is not the token owner. Cannot mint tokens.');
+        console.log("⚠️  Creator is not the token owner. Cannot mint tokens.");
       }
     } catch (transferError) {
-      console.warn('Could not transfer/mint tokens to creator:', transferError.message);
+      console.warn(
+        "Could not transfer/mint tokens to creator:",
+        transferError.message
+      );
       // Continue anyway - user can manually transfer later if needed
     }
 
@@ -549,24 +822,27 @@ app.post('/deploy-token', async (req, res) => {
         currentSupply: ethers.formatUnits(info.currentSupply, 18),
         creator: info.creator,
         owner: info.owner,
-        deployedAt: new Date(Number(info.deployedAt) * 1000).toISOString()
+        deployedAt: new Date(Number(info.deployedAt) * 1000).toISOString(),
       };
     } catch (infoError) {
-      console.warn('Could not fetch token info from factory:', infoError.message);
+      console.warn(
+        "Could not fetch token info from factory:",
+        infoError.message
+      );
       // Fallback to basic info
       tokenInfo = {
         name,
         symbol,
-        initialSupply: initialSupply.toString()
+        initialSupply: initialSupply.toString(),
       };
     }
-    
+
     // Check creator's final balance
     const creatorBalance = await tokenContract.balanceOf(wallet.address);
 
     return res.json({
       success: true,
-      message: 'Token created successfully via TokenFactory',
+      message: "Token created successfully via TokenFactory",
       contractAddress: newTokenAddress,
       tokenInfo: tokenInfo,
       creator: wallet.address,
@@ -574,143 +850,164 @@ app.post('/deploy-token', async (req, res) => {
       transactionHash: tx.hash,
       blockNumber: receipt.blockNumber,
       gasUsed: receipt.gasUsed.toString(),
-      explorerUrl: `https://shannon-explorer.somnia.network/tx/${tx.hash}`,
+      explorerUrl: `https://sepolia.arbiscan.io/tx/${tx.hash}`,
       tokenTransfer: {
         success: transferSuccess,
-        method: transferSuccess ? 'minted' : 'none',
+        method: transferSuccess ? "minted" : "none",
         transactionHash: transferTxHash,
-        note: transferSuccess 
-          ? `Tokens minted to your wallet. Note: This increases total supply.` 
-          : `Initial tokens are in factory contract. You may need to mint tokens using the owner's mint function.`
+        note: transferSuccess
+          ? `Tokens minted to your wallet. Note: This increases total supply.`
+          : `Initial tokens are in factory contract. You may need to mint tokens using the owner's mint function.`,
       },
       balances: {
         factory: ethers.formatUnits(factoryBalance, tokenDecimals),
         creator: ethers.formatUnits(creatorBalance, tokenDecimals),
-        expected: initialSupply.toString()
+        expected: initialSupply.toString(),
       },
-      note: transferSuccess 
+      note: transferSuccess
         ? `${initialSupply} tokens have been minted to your wallet address.`
         : `⚠️  Initial tokens (${initialSupply}) are in the factory contract. You are the token owner and can mint tokens using the mint function.`,
-      nextSteps: transferSuccess ? [
-        `✅ ${initialSupply} tokens are now in your wallet: ${wallet.address}`,
-        `To transfer tokens to someone, use the /transfer endpoint with:`,
-        `  - privateKey: Your wallet private key`,
-        `  - toAddress: Recipient's wallet address`,
-        `  - amount: Amount of tokens to send (as a number, e.g., "100")`,
-        `  - tokenAddress: ${newTokenAddress}`
-      ] : [
-        `⚠️  Note: Initial tokens are in the factory contract (${FACTORY_ADDRESS})`,
-        `You are the token owner and can mint tokens using the token contract's mint function.`,
-        `To transfer tokens to someone, first ensure you have tokens in your wallet, then use the /transfer endpoint.`
-      ]
+      nextSteps: transferSuccess
+        ? [
+            `✅ ${initialSupply} tokens are now in your wallet: ${wallet.address}`,
+            `To transfer tokens to someone, use the /transfer endpoint with:`,
+            `  - privateKey: Your wallet private key`,
+            `  - toAddress: Recipient's wallet address`,
+            `  - amount: Amount of tokens to send (as a number, e.g., "100")`,
+            `  - tokenAddress: ${newTokenAddress}`,
+          ]
+        : [
+            `⚠️  Note: Initial tokens are in the factory contract (${FACTORY_ADDRESS})`,
+            `You are the token owner and can mint tokens using the token contract's mint function.`,
+            `To transfer tokens to someone, first ensure you have tokens in your wallet, then use the /transfer endpoint.`,
+          ],
     });
-
   } catch (error) {
-    console.error('Deploy token error:', error);
+    console.error("Deploy token error:", error);
     return res.status(500).json({
       success: false,
       error: error.message,
-      details: error.reason || error.code
+      details: error.reason || error.code,
     });
   }
 });
 
 // Deploy ERC-721 NFT Collection endpoint using NFTFactory
-app.post('/deploy-nft-collection', async (req, res) => {
+app.post("/deploy-nft-collection", async (req, res) => {
   try {
-    const { 
-      privateKey, 
-      name, 
-      symbol, 
-      baseURI 
-    } = req.body;
+    const { privateKey, name, symbol, baseURI } = req.body;
 
     // Validation
     if (!privateKey || !name || !symbol || !baseURI) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields: privateKey, name, symbol, baseURI'
+        error: "Missing required fields: privateKey, name, symbol, baseURI",
       });
     }
 
-    const provider = new ethers.JsonRpcProvider(SOMNIA_TESTNET_RPC);
+    const provider = new ethers.JsonRpcProvider(ARBITRUM_SEPOLIA_RPC);
     const wallet = new ethers.Wallet(privateKey, provider);
 
     // Check balance for gas
     const balance = await provider.getBalance(wallet.address);
-    console.log('Wallet balance:', ethers.formatEther(balance), 'STT');
-    
+    console.log("Wallet balance:", ethers.formatEther(balance), "STT");
+
     if (balance === 0n) {
       return res.status(400).json({
         success: false,
-        error: 'Insufficient balance for gas fees',
+        error: "Insufficient balance for gas fees",
         currentBalance: ethers.formatEther(balance),
-        required: 'Some testnet tokens for gas'
+        required: "Some testnet tokens for gas",
       });
     }
 
-    console.log('Creating NFT collection via NFTFactory:', { name, symbol, baseURI });
-    console.log('Factory address:', NFT_FACTORY_ADDRESS);
+    console.log("Creating NFT collection via NFTFactory:", {
+      name,
+      symbol,
+      baseURI,
+    });
+    console.log("Factory address:", NFT_FACTORY_ADDRESS);
 
     // Connect to NFTFactory contract
-    const factory = new ethers.Contract(NFT_FACTORY_ADDRESS, NFT_FACTORY_ABI, wallet);
+    const factory = new ethers.Contract(
+      NFT_FACTORY_ADDRESS,
+      NFT_FACTORY_ABI,
+      wallet
+    );
 
     // Estimate gas before sending transaction (for logging and optional gas limit)
-    console.log('Estimating gas for createCollection...');
+    console.log("Estimating gas for createCollection...");
     let gasEstimate;
     let estimatedCost = null;
     try {
-      gasEstimate = await factory.createCollection.estimateGas(name, symbol, baseURI);
-      console.log('Estimated gas:', gasEstimate.toString());
-      
+      gasEstimate = await factory.createCollection.estimateGas(
+        name,
+        symbol,
+        baseURI
+      );
+      console.log("Estimated gas:", gasEstimate.toString());
+
       // Get current gas price for informational purposes only
       const feeData = await provider.getFeeData();
       const gasPrice = feeData.gasPrice || feeData.maxFeePerGas;
-      
+
       if (gasPrice && gasPrice > 0n) {
         estimatedCost = gasEstimate * gasPrice;
-        console.log('Estimated transaction cost:', ethers.formatEther(estimatedCost), 'STT');
-        console.log('Gas price:', ethers.formatUnits(gasPrice, 'gwei'), 'gwei');
-        
+        console.log(
+          "Estimated transaction cost:",
+          ethers.formatEther(estimatedCost),
+          "STT"
+        );
+        console.log("Gas price:", ethers.formatUnits(gasPrice, "gwei"), "gwei");
+
         // Only warn if balance seems insufficient, but don't block the transaction
         if (balance < estimatedCost) {
-          console.warn('⚠️  Warning: Balance may be insufficient for transaction');
-          console.warn('   Balance:', ethers.formatEther(balance), 'STT');
-          console.warn('   Estimated cost:', ethers.formatEther(estimatedCost), 'STT');
+          console.warn(
+            "⚠️  Warning: Balance may be insufficient for transaction"
+          );
+          console.warn("   Balance:", ethers.formatEther(balance), "STT");
+          console.warn(
+            "   Estimated cost:",
+            ethers.formatEther(estimatedCost),
+            "STT"
+          );
         }
       }
     } catch (estimateError) {
-      console.warn('Gas estimation failed (will proceed anyway):', estimateError.message);
+      console.warn(
+        "Gas estimation failed (will proceed anyway):",
+        estimateError.message
+      );
       gasEstimate = null;
     }
 
     // Create collection via factory with estimated gas
-    console.log('Sending createCollection transaction...');
+    console.log("Sending createCollection transaction...");
     let tx;
     if (gasEstimate) {
       // Add 20% buffer to gas estimate
       const gasLimit = (gasEstimate * 120n) / 100n;
-      console.log('Using gas limit:', gasLimit.toString());
+      console.log("Using gas limit:", gasLimit.toString());
       tx = await factory.createCollection(name, symbol, baseURI, { gasLimit });
     } else {
       // Let ethers estimate automatically if our estimation failed
       tx = await factory.createCollection(name, symbol, baseURI);
     }
-    console.log('Transaction hash:', tx.hash);
-    console.log('Waiting for confirmation...');
+    console.log("Transaction hash:", tx.hash);
+    console.log("Waiting for confirmation...");
 
     // Wait for the transaction to be mined
     const receipt = await tx.wait();
-    console.log('Transaction confirmed in block:', receipt.blockNumber);
+    console.log("Transaction confirmed in block:", receipt.blockNumber);
 
     // Parse the CollectionCreated event to get the collection address
     const factoryInterface = new ethers.Interface(NFT_FACTORY_ABI);
     let collectionAddress = null;
-    
+
     for (const log of receipt.logs) {
       try {
         const parsedLog = factoryInterface.parseLog(log);
-        if (parsedLog && parsedLog.name === 'CollectionCreated') {
+        if (parsedLog && parsedLog.name === "CollectionCreated") {
           collectionAddress = parsedLog.args.collectionAddress;
           break;
         }
@@ -720,10 +1017,12 @@ app.post('/deploy-nft-collection', async (req, res) => {
     }
 
     if (!collectionAddress) {
-      throw new Error('CollectionCreated event not found in transaction receipt. Collection creation may have failed.');
+      throw new Error(
+        "CollectionCreated event not found in transaction receipt. Collection creation may have failed."
+      );
     }
 
-    console.log('NFT collection created at address:', collectionAddress);
+    console.log("NFT collection created at address:", collectionAddress);
 
     // Optionally get collection info from factory
     let collectionInfo = null;
@@ -736,21 +1035,24 @@ app.post('/deploy-nft-collection', async (req, res) => {
         totalMinted: info.totalMinted.toString(),
         creator: info.creator,
         owner: info.owner,
-        deployedAt: new Date(Number(info.deployedAt) * 1000).toISOString()
+        deployedAt: new Date(Number(info.deployedAt) * 1000).toISOString(),
       };
     } catch (infoError) {
-      console.warn('Could not fetch collection info from factory:', infoError.message);
+      console.warn(
+        "Could not fetch collection info from factory:",
+        infoError.message
+      );
       // Fallback to basic info
       collectionInfo = {
         name,
         symbol,
-        baseURI
+        baseURI,
       };
     }
 
     return res.json({
       success: true,
-      message: 'NFT collection created successfully via NFTFactory',
+      message: "NFT collection created successfully via NFTFactory",
       collectionAddress: collectionAddress,
       collectionInfo: collectionInfo,
       creator: wallet.address,
@@ -758,15 +1060,14 @@ app.post('/deploy-nft-collection', async (req, res) => {
       transactionHash: tx.hash,
       blockNumber: receipt.blockNumber,
       gasUsed: receipt.gasUsed.toString(),
-      explorerUrl: `https://shannon-explorer.somnia.network/tx/${tx.hash}`
+      explorerUrl: `https://sepolia.arbiscan.io/tx/${tx.hash}`,
     });
-
   } catch (error) {
-    console.error('Deploy NFT collection error:', error);
+    console.error("Deploy NFT collection error:", error);
     return res.status(500).json({
       success: false,
       error: error.message,
-      details: error.reason || error.code
+      details: error.reason || error.code,
     });
   }
 });
@@ -777,7 +1078,7 @@ const NFT_COLLECTION_ABI = [
   "function mintWithURI(address to, string memory uri) returns (uint256)",
   "function owner() view returns (address)",
   "function totalMinted() view returns (uint256)",
-  "function tokenURI(uint256 tokenId) view returns (string)"
+  "function tokenURI(uint256 tokenId) view returns (string)",
 ];
 
 // Function to upload JSON metadata to IPFS using Pinata
@@ -788,89 +1089,102 @@ async function uploadToIPFS(metadata) {
 
     // If Pinata keys are not set, use public IPFS gateway (for demo - not recommended for production)
     if (!PINATA_API_KEY || !PINATA_SECRET_KEY) {
-      console.warn('⚠️  PINATA_API_KEY or PINATA_SECRET_KEY not set in .env');
-      console.warn('   Using alternative method - uploading to public IPFS gateway');
-      
+      console.warn("⚠️  PINATA_API_KEY or PINATA_SECRET_KEY not set in .env");
+      console.warn(
+        "   Using alternative method - uploading to public IPFS gateway"
+      );
+
       // Alternative: Use NFT.Storage or web3.storage
       // For now, return a placeholder that user needs to upload manually
       // Or use a free service like Pinata public gateway
-      throw new Error('IPFS upload requires PINATA_API_KEY and PINATA_SECRET_KEY in .env file. Please add them.');
+      throw new Error(
+        "IPFS upload requires PINATA_API_KEY and PINATA_SECRET_KEY in .env file. Please add them."
+      );
     }
 
     // Convert metadata to JSON string
     const metadataJSON = JSON.stringify(metadata);
-    
+
     // Create FormData for Pinata
     const formData = new FormData();
-    formData.append('file', Buffer.from(metadataJSON), {
-      filename: 'metadata.json',
-      contentType: 'application/json'
+    formData.append("file", Buffer.from(metadataJSON), {
+      filename: "metadata.json",
+      contentType: "application/json",
     });
 
     // Pinata pinJSONToIPFS endpoint
     const pinataMetadata = JSON.stringify({
-      name: `NFT Metadata - ${metadata.name || 'Untitled'}`,
+      name: `NFT Metadata - ${metadata.name || "Untitled"}`,
     });
 
-    formData.append('pinataMetadata', pinataMetadata);
+    formData.append("pinataMetadata", pinataMetadata);
 
     const pinataOptions = JSON.stringify({
       cidVersion: 1,
     });
-    formData.append('pinataOptions', pinataOptions);
+    formData.append("pinataOptions", pinataOptions);
 
     // Upload to Pinata
-    const response = await axios.post('https://api.pinata.cloud/pinning/pinFileToIPFS', formData, {
-      headers: {
-        'pinata_api_key': PINATA_API_KEY,
-        'pinata_secret_api_key': PINATA_SECRET_KEY,
-        ...formData.getHeaders()
-      },
-      maxBodyLength: Infinity,
-      maxContentLength: Infinity
-    });
+    const response = await axios.post(
+      "https://api.pinata.cloud/pinning/pinFileToIPFS",
+      formData,
+      {
+        headers: {
+          pinata_api_key: PINATA_API_KEY,
+          pinata_secret_api_key: PINATA_SECRET_KEY,
+          ...formData.getHeaders(),
+        },
+        maxBodyLength: Infinity,
+        maxContentLength: Infinity,
+      }
+    );
 
     const ipfsHash = response.data.IpfsHash;
     const ipfsUrl = `ipfs://${ipfsHash}`;
-    
-    console.log('✅ Metadata uploaded to IPFS:', ipfsUrl);
-    return ipfsUrl;
 
+    console.log("✅ Metadata uploaded to IPFS:", ipfsUrl);
+    return ipfsUrl;
   } catch (error) {
-    console.error('IPFS upload error:', error.message);
-    
+    console.error("IPFS upload error:", error.message);
+
     // If Pinata fails, try alternative: upload metadata JSON to a folder structure
     // For this, we'll use Pinata's pinJSONToIPFS for the baseURI folder
-    if (error.message.includes('PINATA')) {
+    if (error.message.includes("PINATA")) {
       throw error;
     }
-    
+
     // Try using pinJSONToIPFS directly (simpler but less flexible)
     try {
       const PINATA_API_KEY = process.env.PINATA_API_KEY;
       const PINATA_SECRET_KEY = process.env.PINATA_SECRET_KEY;
 
       if (!PINATA_API_KEY || !PINATA_SECRET_KEY) {
-        throw new Error('PINATA_API_KEY and PINATA_SECRET_KEY required for IPFS upload');
+        throw new Error(
+          "PINATA_API_KEY and PINATA_SECRET_KEY required for IPFS upload"
+        );
       }
 
-      const response = await axios.post('https://api.pinata.cloud/pinning/pinJSONToIPFS', {
-        pinataContent: metadata,
-        pinataMetadata: {
-          name: `metadata-${Date.now()}.json`
+      const response = await axios.post(
+        "https://api.pinata.cloud/pinning/pinJSONToIPFS",
+        {
+          pinataContent: metadata,
+          pinataMetadata: {
+            name: `metadata-${Date.now()}.json`,
+          },
+        },
+        {
+          headers: {
+            pinata_api_key: PINATA_API_KEY,
+            pinata_secret_api_key: PINATA_SECRET_KEY,
+            "Content-Type": "application/json",
+          },
         }
-      }, {
-        headers: {
-          'pinata_api_key': PINATA_API_KEY,
-          'pinata_secret_api_key': PINATA_SECRET_KEY,
-          'Content-Type': 'application/json'
-        }
-      });
+      );
 
       const ipfsHash = response.data.IpfsHash;
       const ipfsUrl = `ipfs://${ipfsHash}`;
-      
-      console.log('✅ Metadata uploaded to IPFS:', ipfsUrl);
+
+      console.log("✅ Metadata uploaded to IPFS:", ipfsUrl);
       return ipfsUrl;
     } catch (fallbackError) {
       throw new Error(`IPFS upload failed: ${fallbackError.message}`);
@@ -885,7 +1199,9 @@ async function uploadBaseURIToIPFS(collectionName, collectionSymbol) {
     const PINATA_SECRET_KEY = process.env.PINATA_SECRET_KEY;
 
     if (!PINATA_API_KEY || !PINATA_SECRET_KEY) {
-      throw new Error('PINATA_API_KEY and PINATA_SECRET_KEY required for IPFS upload');
+      throw new Error(
+        "PINATA_API_KEY and PINATA_SECRET_KEY required for IPFS upload"
+      );
     }
 
     // Create a placeholder metadata file for the directory
@@ -893,7 +1209,7 @@ async function uploadBaseURIToIPFS(collectionName, collectionSymbol) {
       name: `${collectionName} - Token #1`,
       description: `An NFT from ${collectionName} collection`,
       image: "ipfs://placeholder", // User should upload images separately
-      attributes: []
+      attributes: [],
     };
 
     // For baseURI, we'll return a Pinata IPFS gateway URL structure
@@ -903,67 +1219,66 @@ async function uploadBaseURIToIPFS(collectionName, collectionSymbol) {
       name: `${collectionName} Collection`,
       description: `Base directory for ${collectionName} NFT metadata`,
       collection: collectionName,
-      symbol: collectionSymbol
+      symbol: collectionSymbol,
     };
 
-    const response = await axios.post('https://api.pinata.cloud/pinning/pinJSONToIPFS', {
-      pinataContent: directoryMetadata,
-      pinataMetadata: {
-        name: `${collectionSymbol}-base-directory`
+    const response = await axios.post(
+      "https://api.pinata.cloud/pinning/pinJSONToIPFS",
+      {
+        pinataContent: directoryMetadata,
+        pinataMetadata: {
+          name: `${collectionSymbol}-base-directory`,
+        },
+      },
+      {
+        headers: {
+          pinata_api_key: PINATA_API_KEY,
+          pinata_secret_api_key: PINATA_SECRET_KEY,
+          "Content-Type": "application/json",
+        },
       }
-    }, {
-      headers: {
-        'pinata_api_key': PINATA_API_KEY,
-        'pinata_secret_api_key': PINATA_SECRET_KEY,
-        'Content-Type': 'application/json'
-      }
-    });
+    );
 
     const ipfsHash = response.data.IpfsHash;
     // Return baseURI pointing to this directory (tokens will be numbered: 1, 2, 3, etc.)
     const baseURI = `ipfs://${ipfsHash}/`;
-    
-    console.log('✅ Base directory created on IPFS:', baseURI);
-    return baseURI;
 
+    console.log("✅ Base directory created on IPFS:", baseURI);
+    return baseURI;
   } catch (error) {
     throw new Error(`Failed to create IPFS base directory: ${error.message}`);
   }
 }
 
 // Simplified NFT collection creation with automatic IPFS upload
-app.post('/create-nft-collection', async (req, res) => {
+app.post("/create-nft-collection", async (req, res) => {
   try {
-    const { 
-      privateKey,
-      name,
-      symbol
-    } = req.body;
+    const { privateKey, name, symbol } = req.body;
 
     // Validation
     if (!privateKey || !name || !symbol) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields: privateKey, name, symbol'
+        error: "Missing required fields: privateKey, name, symbol",
       });
     }
 
-    const provider = new ethers.JsonRpcProvider(SOMNIA_TESTNET_RPC);
+    const provider = new ethers.JsonRpcProvider(ARBITRUM_SEPOLIA_RPC);
     const wallet = new ethers.Wallet(privateKey, provider);
 
     // Check balance
     const balance = await provider.getBalance(wallet.address);
-    console.log('Wallet balance:', ethers.formatEther(balance), 'STT');
-    
+    console.log("Wallet balance:", ethers.formatEther(balance), "STT");
+
     if (balance === 0n) {
       return res.status(400).json({
         success: false,
-        error: 'Insufficient balance for gas fees',
-        currentBalance: ethers.formatEther(balance)
+        error: "Insufficient balance for gas fees",
+        currentBalance: ethers.formatEther(balance),
       });
     }
 
-    console.log('🚀 Creating NFT collection with automatic IPFS upload...');
+    console.log("🚀 Creating NFT collection with automatic IPFS upload...");
     console.log(`Collection: ${name} (${symbol})`);
 
     // Step 1: Generate metadata for first NFT
@@ -974,27 +1289,28 @@ app.post('/create-nft-collection', async (req, res) => {
       attributes: [
         {
           trait_type: "Collection",
-          value: name
+          value: name,
         },
         {
           trait_type: "Token Number",
-          value: "1"
-        }
-      ]
+          value: "1",
+        },
+      ],
     };
 
     // Step 2: Upload first token metadata to IPFS
-    console.log('📤 Uploading metadata to IPFS...');
+    console.log("📤 Uploading metadata to IPFS...");
     let tokenMetadataIPFS;
     try {
       tokenMetadataIPFS = await uploadToIPFS(firstTokenMetadata);
-      console.log('✅ Metadata uploaded:', tokenMetadataIPFS);
+      console.log("✅ Metadata uploaded:", tokenMetadataIPFS);
     } catch (ipfsError) {
       return res.status(500).json({
         success: false,
-        error: 'Failed to upload metadata to IPFS',
+        error: "Failed to upload metadata to IPFS",
         details: ipfsError.message,
-        instruction: 'Please set PINATA_API_KEY and PINATA_SECRET_KEY in your .env file'
+        instruction:
+          "Please set PINATA_API_KEY and PINATA_SECRET_KEY in your .env file",
       });
     }
 
@@ -1003,7 +1319,7 @@ app.post('/create-nft-collection', async (req, res) => {
     // For simplicity, we'll use a pattern where tokenId is appended
     const ipfsHashMatch = tokenMetadataIPFS.match(/ipfs:\/\/([^\/]+)/);
     if (!ipfsHashMatch) {
-      throw new Error('Failed to extract IPFS hash from metadata URL');
+      throw new Error("Failed to extract IPFS hash from metadata URL");
     }
 
     // For baseURI, we'll use a directory structure
@@ -1012,7 +1328,7 @@ app.post('/create-nft-collection', async (req, res) => {
     // For now, we'll use the hash pattern where {tokenId} gets appended
     const ipfsHash = ipfsHashMatch[1];
     const baseURI = `ipfs://${ipfsHash.substring(0, ipfsHash.length - 2)}/`; // Simplified approach
-    
+
     // Better approach: Use the actual IPFS directory structure
     // Let's upload to a proper directory structure
     let finalBaseURI;
@@ -1025,36 +1341,48 @@ app.post('/create-nft-collection', async (req, res) => {
       }
     } catch (dirError) {
       // Fallback to using metadata hash pattern
-      console.warn('Could not create directory structure, using metadata hash pattern');
+      console.warn(
+        "Could not create directory structure, using metadata hash pattern"
+      );
       finalBaseURI = `ipfs://${ipfsHash.substring(0, 20)}/`; // Simplified pattern
     }
 
-    console.log('📁 Base URI:', finalBaseURI);
+    console.log("📁 Base URI:", finalBaseURI);
 
     // Step 4: Create NFT collection with IPFS baseURI
-    console.log('🏭 Creating NFT collection on blockchain...');
-    const factory = new ethers.Contract(NFT_FACTORY_ADDRESS, NFT_FACTORY_ABI, wallet);
-    
+    console.log("🏭 Creating NFT collection on blockchain...");
+    const factory = new ethers.Contract(
+      NFT_FACTORY_ADDRESS,
+      NFT_FACTORY_ABI,
+      wallet
+    );
+
     let createTx;
     try {
-      const gasEstimate = await factory.createCollection.estimateGas(name, symbol, finalBaseURI);
+      const gasEstimate = await factory.createCollection.estimateGas(
+        name,
+        symbol,
+        finalBaseURI
+      );
       const gasLimit = (gasEstimate * 120n) / 100n;
-      createTx = await factory.createCollection(name, symbol, finalBaseURI, { gasLimit });
+      createTx = await factory.createCollection(name, symbol, finalBaseURI, {
+        gasLimit,
+      });
     } catch (estimateError) {
-      console.warn('Gas estimation failed, proceeding without gas limit');
+      console.warn("Gas estimation failed, proceeding without gas limit");
       createTx = await factory.createCollection(name, symbol, finalBaseURI);
     }
 
     const createReceipt = await createTx.wait();
-    
+
     // Parse CollectionCreated event
     const factoryInterface = new ethers.Interface(NFT_FACTORY_ABI);
     let collectionAddress = null;
-    
+
     for (const log of createReceipt.logs) {
       try {
         const parsedLog = factoryInterface.parseLog(log);
-        if (parsedLog && parsedLog.name === 'CollectionCreated') {
+        if (parsedLog && parsedLog.name === "CollectionCreated") {
           collectionAddress = parsedLog.args.collectionAddress;
           break;
         }
@@ -1062,71 +1390,79 @@ app.post('/create-nft-collection', async (req, res) => {
     }
 
     if (!collectionAddress) {
-      throw new Error('Failed to extract collection address from transaction');
+      throw new Error("Failed to extract collection address from transaction");
     }
 
-    console.log('✅ Collection created:', collectionAddress);
+    console.log("✅ Collection created:", collectionAddress);
 
     // Step 5: Mint first NFT to the wallet owner
-    console.log('🎨 Minting first NFT...');
-    const nftContract = new ethers.Contract(collectionAddress, NFT_COLLECTION_ABI, wallet);
-    
+    console.log("🎨 Minting first NFT...");
+    const nftContract = new ethers.Contract(
+      collectionAddress,
+      NFT_COLLECTION_ABI,
+      wallet
+    );
+
     // Mint with the specific metadata URI
-    const mintTx = await nftContract.mintWithURI(wallet.address, tokenMetadataIPFS);
+    const mintTx = await nftContract.mintWithURI(
+      wallet.address,
+      tokenMetadataIPFS
+    );
     const mintReceipt = await mintTx.wait();
-    
+
     const totalMinted = await nftContract.totalMinted();
     const tokenId = Number(totalMinted);
 
-    console.log('✅ NFT minted successfully!');
+    console.log("✅ NFT minted successfully!");
 
     return res.json({
       success: true,
-      message: 'NFT collection created and first NFT minted successfully',
+      message: "NFT collection created and first NFT minted successfully",
       collection: {
         address: collectionAddress,
         name: name,
         symbol: symbol,
-        baseURI: finalBaseURI
+        baseURI: finalBaseURI,
       },
       firstNFT: {
         tokenId: tokenId.toString(),
         owner: wallet.address,
         metadataURI: tokenMetadataIPFS,
-        metadata: firstTokenMetadata
+        metadata: firstTokenMetadata,
       },
       transactions: {
         collectionCreation: createReceipt.hash,
-        minting: mintReceipt.hash
+        minting: mintReceipt.hash,
       },
       blockNumber: mintReceipt.blockNumber,
-      gasUsed: (BigInt(createReceipt.gasUsed) + BigInt(mintReceipt.gasUsed)).toString(),
+      gasUsed: (
+        BigInt(createReceipt.gasUsed) + BigInt(mintReceipt.gasUsed)
+      ).toString(),
       explorerUrls: {
-        collection: `https://shannon-explorer.somnia.network/tx/${createReceipt.hash}`,
-        mint: `https://shannon-explorer.somnia.network/tx/${mintReceipt.hash}`
+        collection: `https://sepolia.arbiscan.io/tx/${createReceipt.hash}`,
+        mint: `https://sepolia.arbiscan.io/tx/${mintReceipt.hash}`,
       },
       nextSteps: [
         `Your collection is live at: ${collectionAddress}`,
         `Upload NFT images to IPFS and update metadata`,
         `Use the collection address to mint more NFTs`,
-        `Metadata for token #${tokenId} is available at: ${tokenMetadataIPFS}`
-      ]
+        `Metadata for token #${tokenId} is available at: ${tokenMetadataIPFS}`,
+      ],
     });
-
   } catch (error) {
-    console.error('Create NFT collection error:', error);
+    console.error("Create NFT collection error:", error);
     return res.status(500).json({
       success: false,
       error: error.message,
-      details: error.reason || error.code
+      details: error.reason || error.code,
     });
   }
 });
 
 // Complete NFT creation and minting flow
-app.post('/create-and-mint-nft', async (req, res) => {
+app.post("/create-and-mint-nft", async (req, res) => {
   try {
-    const { 
+    const {
       privateKey,
       collectionAddress, // Optional: if provided, uses existing collection
       // Collection creation params (if collectionAddress not provided)
@@ -1139,14 +1475,14 @@ app.post('/create-and-mint-nft', async (req, res) => {
       nftName,
       nftDescription,
       imageUrl, // URL or IPFS hash of the image
-      attributes // Optional: array of {trait_type, value} objects
+      attributes, // Optional: array of {trait_type, value} objects
     } = req.body;
 
     // Validation
     if (!privateKey || !recipientAddress) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields: privateKey, recipientAddress'
+        error: "Missing required fields: privateKey, recipientAddress",
       });
     }
 
@@ -1154,22 +1490,23 @@ app.post('/create-and-mint-nft', async (req, res) => {
     if (!collectionAddress && (!collectionName || !collectionSymbol)) {
       return res.status(400).json({
         success: false,
-        error: 'Either provide collectionAddress or collectionName + collectionSymbol'
+        error:
+          "Either provide collectionAddress or collectionName + collectionSymbol",
       });
     }
 
-    const provider = new ethers.JsonRpcProvider(SOMNIA_TESTNET_RPC);
+    const provider = new ethers.JsonRpcProvider(ARBITRUM_SEPOLIA_RPC);
     const wallet = new ethers.Wallet(privateKey, provider);
 
     // Check balance
     const balance = await provider.getBalance(wallet.address);
-    console.log('Wallet balance:', ethers.formatEther(balance), 'STT');
-    
+    console.log("Wallet balance:", ethers.formatEther(balance), "STT");
+
     if (balance === 0n) {
       return res.status(400).json({
         success: false,
-        error: 'Insufficient balance for gas fees',
-        currentBalance: ethers.formatEther(balance)
+        error: "Insufficient balance for gas fees",
+        currentBalance: ethers.formatEther(balance),
       });
     }
 
@@ -1178,39 +1515,54 @@ app.post('/create-and-mint-nft', async (req, res) => {
 
     // Step 1: Create collection if not provided
     if (!collectionAddress) {
-      console.log('Creating new NFT collection...');
-      
+      console.log("Creating new NFT collection...");
+
       // If baseURI not provided, create a placeholder
       if (!finalBaseURI) {
         finalBaseURI = `https://api.example.com/metadata/${collectionSymbol.toLowerCase()}/`;
-        console.log('⚠️  No baseURI provided, using placeholder. Update collection baseURI later if needed.');
+        console.log(
+          "⚠️  No baseURI provided, using placeholder. Update collection baseURI later if needed."
+        );
       }
 
-      const factory = new ethers.Contract(NFT_FACTORY_ADDRESS, NFT_FACTORY_ABI, wallet);
-      
+      const factory = new ethers.Contract(
+        NFT_FACTORY_ADDRESS,
+        NFT_FACTORY_ABI,
+        wallet
+      );
+
       // Estimate and create collection
       let tx;
       try {
         const gasEstimate = await factory.createCollection.estimateGas(
-          collectionName, 
-          collectionSymbol, 
+          collectionName,
+          collectionSymbol,
           finalBaseURI
         );
         const gasLimit = (gasEstimate * 120n) / 100n;
-        tx = await factory.createCollection(collectionName, collectionSymbol, finalBaseURI, { gasLimit });
+        tx = await factory.createCollection(
+          collectionName,
+          collectionSymbol,
+          finalBaseURI,
+          { gasLimit }
+        );
       } catch (estimateError) {
-        console.warn('Gas estimation failed, proceeding without gas limit');
-        tx = await factory.createCollection(collectionName, collectionSymbol, finalBaseURI);
+        console.warn("Gas estimation failed, proceeding without gas limit");
+        tx = await factory.createCollection(
+          collectionName,
+          collectionSymbol,
+          finalBaseURI
+        );
       }
 
       const receipt = await tx.wait();
-      
+
       // Parse CollectionCreated event
       const factoryInterface = new ethers.Interface(NFT_FACTORY_ABI);
       for (const log of receipt.logs) {
         try {
           const parsedLog = factoryInterface.parseLog(log);
-          if (parsedLog && parsedLog.name === 'CollectionCreated') {
+          if (parsedLog && parsedLog.name === "CollectionCreated") {
             finalCollectionAddress = parsedLog.args.collectionAddress;
             break;
           }
@@ -1218,124 +1570,142 @@ app.post('/create-and-mint-nft', async (req, res) => {
       }
 
       if (!finalCollectionAddress) {
-        throw new Error('Failed to extract collection address from transaction');
+        throw new Error(
+          "Failed to extract collection address from transaction"
+        );
       }
 
-      console.log('✅ Collection created at:', finalCollectionAddress);
+      console.log("✅ Collection created at:", finalCollectionAddress);
     } else {
-      console.log('Using existing collection:', finalCollectionAddress);
+      console.log("Using existing collection:", finalCollectionAddress);
     }
 
     // Step 2: Connect to NFT collection contract
-    const nftContract = new ethers.Contract(finalCollectionAddress, NFT_COLLECTION_ABI, wallet);
-    
+    const nftContract = new ethers.Contract(
+      finalCollectionAddress,
+      NFT_COLLECTION_ABI,
+      wallet
+    );
+
     // Verify ownership (only owner can mint)
     const owner = await nftContract.owner();
     if (owner.toLowerCase() !== wallet.address.toLowerCase()) {
       return res.status(403).json({
         success: false,
-        error: 'Only collection owner can mint NFTs',
+        error: "Only collection owner can mint NFTs",
         collectionOwner: owner,
-        yourAddress: wallet.address
+        yourAddress: wallet.address,
       });
     }
 
     // Step 3: Generate metadata JSON
-    const tokenId = Number((await nftContract.totalMinted())) + 1; // Next token ID
+    const tokenId = Number(await nftContract.totalMinted()) + 1; // Next token ID
     const metadata = {
       name: nftName || `NFT #${tokenId}`,
-      description: nftDescription || `An NFT from ${collectionName || 'collection'}`,
-      image: imageUrl || '',
-      attributes: attributes || []
+      description:
+        nftDescription || `An NFT from ${collectionName || "collection"}`,
+      image: imageUrl || "",
+      attributes: attributes || [],
     };
 
     // Construct metadata URI
     // Option 1: If using baseURI with token ID
-    let tokenMetadataURI = '';
-    if (finalBaseURI && !finalBaseURI.endsWith('/')) {
-      finalBaseURI = finalBaseURI + '/';
+    let tokenMetadataURI = "";
+    if (finalBaseURI && !finalBaseURI.endsWith("/")) {
+      finalBaseURI = finalBaseURI + "/";
     }
-    
-    if (finalBaseURI && finalBaseURI.startsWith('http')) {
+
+    if (finalBaseURI && finalBaseURI.startsWith("http")) {
       // HTTP/HTTPS baseURI - append token ID
       tokenMetadataURI = `${finalBaseURI}${tokenId}`;
-    } else if (finalBaseURI && finalBaseURI.startsWith('ipfs://')) {
+    } else if (finalBaseURI && finalBaseURI.startsWith("ipfs://")) {
       // IPFS baseURI - append token ID
       tokenMetadataURI = `${finalBaseURI}${tokenId}`;
     } else {
       // No baseURI or custom - would need to upload metadata separately
       // For now, we'll use mintWithURI if they provide a custom URI
-      tokenMetadataURI = finalBaseURI || '';
+      tokenMetadataURI = finalBaseURI || "";
     }
 
-    console.log('📝 Generated metadata:', JSON.stringify(metadata, null, 2));
-    console.log('🔗 Token metadata URI:', tokenMetadataURI || '(will use baseURI + tokenId)');
+    console.log("📝 Generated metadata:", JSON.stringify(metadata, null, 2));
+    console.log(
+      "🔗 Token metadata URI:",
+      tokenMetadataURI || "(will use baseURI + tokenId)"
+    );
 
     // Step 4: Mint the NFT
     let mintTx;
     if (tokenMetadataURI && !tokenMetadataURI.endsWith(tokenId.toString())) {
       // Custom URI provided - use mintWithURI
-      console.log('Minting NFT with custom URI...');
-      mintTx = await nftContract.mintWithURI(recipientAddress, tokenMetadataURI);
+      console.log("Minting NFT with custom URI...");
+      mintTx = await nftContract.mintWithURI(
+        recipientAddress,
+        tokenMetadataURI
+      );
     } else {
       // Use standard mint (will use baseURI + tokenId)
-      console.log('Minting NFT...');
+      console.log("Minting NFT...");
       mintTx = await nftContract.mint(recipientAddress);
     }
 
-    console.log('Transaction hash:', mintTx.hash);
+    console.log("Transaction hash:", mintTx.hash);
     const mintReceipt = await mintTx.wait();
-    console.log('✅ NFT minted successfully');
+    console.log("✅ NFT minted successfully");
 
     // Get final token ID (in case it changed)
     const totalMinted = await nftContract.totalMinted();
     const finalTokenId = Number(totalMinted);
-    const finalTokenURI = await nftContract.tokenURI(finalTokenId).catch(() => '');
+    const finalTokenURI = await nftContract
+      .tokenURI(finalTokenId)
+      .catch(() => "");
 
     return res.json({
       success: true,
-      message: 'NFT created and minted successfully',
+      message: "NFT created and minted successfully",
       collectionAddress: finalCollectionAddress,
       tokenId: finalTokenId.toString(),
       recipient: recipientAddress,
       metadata: metadata,
-      metadataURI: finalTokenURI || tokenMetadataURI || `${finalBaseURI}${finalTokenId}`,
+      metadataURI:
+        finalTokenURI || tokenMetadataURI || `${finalBaseURI}${finalTokenId}`,
       mintTransactionHash: mintReceipt.hash,
       blockNumber: mintReceipt.blockNumber,
       gasUsed: mintReceipt.gasUsed.toString(),
-      explorerUrl: `https://shannon-explorer.somnia.network/tx/${mintReceipt.hash}`,
-      nextSteps: tokenMetadataURI ? [] : [
-        'Upload the metadata JSON to your storage (IPFS, Arweave, or your server)',
-        `Update the collection baseURI to point to your metadata location`,
-        `Metadata should be accessible at: ${finalBaseURI}${finalTokenId}`
-      ]
+      explorerUrl: `https://sepolia.arbiscan.io/tx/${mintReceipt.hash}`,
+      nextSteps: tokenMetadataURI
+        ? []
+        : [
+            "Upload the metadata JSON to your storage (IPFS, Arweave, or your server)",
+            `Update the collection baseURI to point to your metadata location`,
+            `Metadata should be accessible at: ${finalBaseURI}${finalTokenId}`,
+          ],
     });
-
   } catch (error) {
-    console.error('Create and mint NFT error:', error);
+    console.error("Create and mint NFT error:", error);
     return res.status(500).json({
       success: false,
       error: error.message,
-      details: error.reason || error.code
+      details: error.reason || error.code,
     });
   }
 });
 
 // Create DAO endpoint using DAOFactory
-app.post('/create-dao', async (req, res) => {
+app.post("/create-dao", async (req, res) => {
   try {
-    const { 
+    const {
       privateKey,
       name,
       votingPeriod, // in seconds (e.g., 604800 for 7 days)
-      quorumPercentage // percentage (e.g., 51 for 51%)
+      quorumPercentage, // percentage (e.g., 51 for 51%)
     } = req.body;
 
     // Validation
     if (!privateKey || !name || !votingPeriod || !quorumPercentage) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields: privateKey, name, votingPeriod, quorumPercentage'
+        error:
+          "Missing required fields: privateKey, name, votingPeriod, quorumPercentage",
       });
     }
 
@@ -1344,7 +1714,7 @@ app.post('/create-dao', async (req, res) => {
     if (isNaN(quorum) || quorum < 0 || quorum > 100) {
       return res.status(400).json({
         success: false,
-        error: 'quorumPercentage must be a number between 0 and 100'
+        error: "quorumPercentage must be a number between 0 and 100",
       });
     }
 
@@ -1353,92 +1723,157 @@ app.post('/create-dao', async (req, res) => {
     if (isNaN(votingPeriodNum) || votingPeriodNum <= 0) {
       return res.status(400).json({
         success: false,
-        error: 'votingPeriod must be a positive number (in seconds)'
+        error: "votingPeriod must be a positive number (in seconds)",
       });
     }
 
-    const provider = new ethers.JsonRpcProvider(SOMNIA_TESTNET_RPC);
+    const provider = new ethers.JsonRpcProvider(ARBITRUM_SEPOLIA_RPC);
     const wallet = new ethers.Wallet(privateKey, provider);
 
     // Check balance for gas
     const balance = await provider.getBalance(wallet.address);
-    console.log('Wallet balance:', ethers.formatEther(balance), 'STT');
-    
+    console.log("Wallet balance:", ethers.formatEther(balance), "STT");
+
     if (balance === 0n) {
       return res.status(400).json({
         success: false,
-        error: 'Insufficient balance for gas fees',
+        error: "Insufficient balance for gas fees",
         currentBalance: ethers.formatEther(balance),
-        required: 'Some testnet tokens for gas'
+        required: "Some testnet tokens for gas",
       });
     }
 
-    console.log('Creating DAO via DAOFactory:', { name, votingPeriod, quorumPercentage });
-    console.log('Factory address:', DAO_FACTORY_ADDRESS);
+    // Use provided DAO address or default to template
+    const daoAddress = req.body.daoAddress || DAO_CONTRACT_ADDRESS;
 
-    // Connect to DAOFactory contract
-    const factory = new ethers.Contract(DAO_FACTORY_ADDRESS, DAO_FACTORY_ABI, wallet);
+    if (!ethers.isAddress(daoAddress)) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid DAO contract address",
+      });
+    }
+
+    console.log("Creating DAO:", {
+      name,
+      votingPeriod,
+      quorumPercentage,
+      daoAddress: daoAddress,
+    });
+    console.log("Factory address:", DAO_FACTORY_ADDRESS);
 
     // Convert to BigInt
     const votingPeriodBigInt = BigInt(votingPeriod.toString());
     const quorumPercentageBigInt = BigInt(quorumPercentage.toString());
 
-    // Estimate gas before sending transaction
-    console.log('Estimating gas for createDAO...');
-    let gasEstimate;
-    let estimatedCost = null;
+    // Step 1: Initialize the DAO contract
+    console.log("Step 1: Initializing DAO contract...");
+    const daoContract = new ethers.Contract(daoAddress, DAO_ABI, wallet);
+
+    let initTx;
+    let initReceipt;
     try {
-      gasEstimate = await factory.createDAO.estimateGas(name, votingPeriodBigInt, quorumPercentageBigInt);
-      console.log('Estimated gas:', gasEstimate.toString());
-      
-      // Get current gas price for informational purposes only
-      const feeData = await provider.getFeeData();
-      const gasPrice = feeData.gasPrice || feeData.maxFeePerGas;
-      
-      if (gasPrice && gasPrice > 0n) {
-        estimatedCost = gasEstimate * gasPrice;
-        console.log('Estimated transaction cost:', ethers.formatEther(estimatedCost), 'STT');
-        console.log('Gas price:', ethers.formatUnits(gasPrice, 'gwei'), 'gwei');
-        
-        if (balance < estimatedCost) {
-          console.warn('⚠️  Warning: Balance may be insufficient for transaction');
-          console.warn('   Balance:', ethers.formatEther(balance), 'STT');
-          console.warn('   Estimated cost:', ethers.formatEther(estimatedCost), 'STT');
-        }
+      // Estimate gas for init
+      let initGasEstimate;
+      try {
+        initGasEstimate = await daoContract.init.estimateGas(
+          name,
+          wallet.address, // creator
+          votingPeriodBigInt,
+          quorumPercentageBigInt
+        );
+        console.log("Init gas estimate:", initGasEstimate.toString());
+      } catch (estimateError) {
+        console.warn("Init gas estimation failed:", estimateError.message);
+        initGasEstimate = null;
       }
+
+      // Call init
+      if (initGasEstimate) {
+        const initGasLimit = (initGasEstimate * 120n) / 100n;
+        initTx = await daoContract.init(
+          name,
+          wallet.address,
+          votingPeriodBigInt,
+          quorumPercentageBigInt,
+          { gasLimit: initGasLimit }
+        );
+      } else {
+        initTx = await daoContract.init(
+          name,
+          wallet.address,
+          votingPeriodBigInt,
+          quorumPercentageBigInt
+        );
+      }
+
+      console.log("Init transaction hash:", initTx.hash);
+      initReceipt = await initTx.wait();
+      console.log("✅ DAO initialized in block:", initReceipt.blockNumber);
+    } catch (initError) {
+      // If init fails, it might already be initialized - continue anyway
+      console.warn(
+        "DAO init failed (may already be initialized):",
+        initError.message
+      );
+      // Continue to registration - the factory will handle duplicates
+    }
+
+    // Step 2: Register DAO in factory
+    console.log("Step 2: Registering DAO in factory...");
+    const factory = new ethers.Contract(
+      DAO_FACTORY_ADDRESS,
+      DAO_FACTORY_ABI,
+      wallet
+    );
+
+    // Estimate gas for registration
+    let registerGasEstimate;
+    try {
+      registerGasEstimate = await factory.registerDao.estimateGas(
+        daoAddress,
+        name,
+        votingPeriodBigInt,
+        quorumPercentageBigInt
+      );
+      console.log("Register gas estimate:", registerGasEstimate.toString());
     } catch (estimateError) {
-      console.warn('Gas estimation failed (will proceed anyway):', estimateError.message);
-      gasEstimate = null;
+      console.warn("Register gas estimation failed:", estimateError.message);
+      registerGasEstimate = null;
     }
 
-    // Create DAO via factory with estimated gas
-    console.log('Sending createDAO transaction...');
-    let tx;
-    if (gasEstimate) {
-      // Add 20% buffer to gas estimate
-      const gasLimit = (gasEstimate * 120n) / 100n;
-      console.log('Using gas limit:', gasLimit.toString());
-      tx = await factory.createDAO(name, votingPeriodBigInt, quorumPercentageBigInt, { gasLimit });
+    // Register DAO
+    let registerTx;
+    if (registerGasEstimate) {
+      const registerGasLimit = (registerGasEstimate * 120n) / 100n;
+      registerTx = await factory.registerDao(
+        daoAddress,
+        name,
+        votingPeriodBigInt,
+        quorumPercentageBigInt,
+        { gasLimit: registerGasLimit }
+      );
     } else {
-      // Let ethers estimate automatically if our estimation failed
-      tx = await factory.createDAO(name, votingPeriodBigInt, quorumPercentageBigInt);
+      registerTx = await factory.registerDao(
+        daoAddress,
+        name,
+        votingPeriodBigInt,
+        quorumPercentageBigInt
+      );
     }
-    console.log('Transaction hash:', tx.hash);
-    console.log('Waiting for confirmation...');
 
-    // Wait for the transaction to be mined
-    const receipt = await tx.wait();
-    console.log('Transaction confirmed in block:', receipt.blockNumber);
+    console.log("Register transaction hash:", registerTx.hash);
+    const registerReceipt = await registerTx.wait();
+    console.log("✅ DAO registered in block:", registerReceipt.blockNumber);
 
-    // Parse the DAOCreated event to get the DAO address
+    // Parse the DAOCreated event from factory
     const factoryInterface = new ethers.Interface(DAO_FACTORY_ABI);
-    let daoAddress = null;
-    
-    for (const log of receipt.logs) {
+    let eventData = null;
+
+    for (const log of registerReceipt.logs) {
       try {
         const parsedLog = factoryInterface.parseLog(log);
-        if (parsedLog && parsedLog.name === 'DAOCreated') {
-          daoAddress = parsedLog.args.daoAddress;
+        if (parsedLog && parsedLog.name === "DAOCreated") {
+          eventData = parsedLog.args;
           break;
         }
       } catch (e) {
@@ -1446,32 +1881,25 @@ app.post('/create-dao', async (req, res) => {
       }
     }
 
-    if (!daoAddress) {
-      throw new Error('DAOCreated event not found in transaction receipt. DAO creation may have failed.');
-    }
-
-    console.log('✅ DAO created at address:', daoAddress);
-
-    // Get DAO info from the created contract
+    // Get DAO info from the contract
     let daoInfo = null;
     try {
-      const daoContract = new ethers.Contract(daoAddress, DAO_ABI, provider);
       daoInfo = {
         name: await daoContract.name(),
-        owner: await daoContract.owner(),
+        creator: await daoContract.creator(),
         memberCount: (await daoContract.memberCount()).toString(),
         votingPeriod: (await daoContract.votingPeriod()).toString(),
         quorumPercentage: (await daoContract.quorumPercentage()).toString(),
         proposalCount: (await daoContract.proposalCount()).toString(),
-        totalVotingPower: (await daoContract.getTotalVotingPower()).toString()
+        totalVotingPower: (await daoContract.getTotalVotingPower()).toString(),
       };
     } catch (infoError) {
-      console.warn('Could not fetch DAO info:', infoError.message);
+      console.warn("Could not fetch DAO info:", infoError.message);
       // Fallback to basic info
       daoInfo = {
         name: name,
         votingPeriod: votingPeriod.toString(),
-        quorumPercentage: quorumPercentage.toString()
+        quorumPercentage: quorumPercentage.toString(),
       };
     }
 
@@ -1480,47 +1908,71 @@ app.post('/create-dao', async (req, res) => {
 
     return res.json({
       success: true,
-      message: 'DAO created successfully via DAOFactory',
+      message: "DAO initialized and registered successfully",
       dao: {
         address: daoAddress,
         name: daoInfo.name || name,
-        owner: daoInfo.owner || wallet.address,
-        memberCount: daoInfo.memberCount || '0',
+        creator: daoInfo.creator || wallet.address,
+        memberCount: daoInfo.memberCount || "1", // Creator is automatically added
         votingPeriod: {
           seconds: votingPeriod.toString(),
-          days: votingPeriodDays.toFixed(2)
+          days: (votingPeriodNum / (24 * 60 * 60)).toFixed(2),
         },
-        quorumPercentage: daoInfo.quorumPercentage || quorumPercentage.toString(),
-        proposalCount: daoInfo.proposalCount || '0',
-        totalVotingPower: daoInfo.totalVotingPower || '0'
+        quorumPercentage:
+          daoInfo.quorumPercentage || quorumPercentage.toString(),
+        proposalCount: daoInfo.proposalCount || "0",
+        totalVotingPower: daoInfo.totalVotingPower || "1", // Creator has 1 voting power
       },
-      creator: wallet.address,
+      transactions: {
+        init: initReceipt
+          ? {
+              hash: initReceipt.hash,
+              blockNumber: initReceipt.blockNumber,
+              gasUsed: initReceipt.gasUsed.toString(),
+            }
+          : null,
+        register: {
+          hash: registerReceipt.hash,
+          blockNumber: registerReceipt.blockNumber,
+          gasUsed: registerReceipt.gasUsed.toString(),
+        },
+      },
       factoryAddress: DAO_FACTORY_ADDRESS,
-      transactionHash: tx.hash,
-      blockNumber: receipt.blockNumber,
-      gasUsed: receipt.gasUsed.toString(),
-      explorerUrl: `https://shannon-explorer.somnia.network/tx/${tx.hash}`,
+      explorerUrls: {
+        init: initReceipt
+          ? `https://sepolia.arbiscan.io/tx/${initReceipt.hash}`
+          : null,
+        register: `https://sepolia.arbiscan.io/tx/${registerReceipt.hash}`,
+      },
+      event: eventData
+        ? {
+            daoAddress: eventData.daoAddress,
+            name: eventData.name,
+            creator: eventData.creator,
+            votingPeriod: eventData.votingPeriod.toString(),
+            quorumPercentage: eventData.quorumPercentage.toString(),
+          }
+        : null,
       nextSteps: [
         `Your DAO is live at: ${daoAddress}`,
-        `Add members using addMember or addMembers functions`,
+        `Add members using addMember function`,
         `Create proposals using createProposal function`,
         `Members can vote using vote function`,
-        `Execute proposals after voting period ends using executeProposal`
-      ]
+        `Execute proposals after voting period ends using executeProposal`,
+      ],
     });
-
   } catch (error) {
-    console.error('Create DAO error:', error);
+    console.error("Create DAO error:", error);
     return res.status(500).json({
       success: false,
       error: error.message,
-      details: error.reason || error.code
+      details: error.reason || error.code,
     });
   }
 });
 
 // Swap helper functions (from swap.js)
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function getTokenDecimals(contract) {
   try {
@@ -1533,56 +1985,80 @@ async function getTokenDecimals(contract) {
 async function checkBalance(tokenContract, walletAddress, amountWei, decimals) {
   const balance = await tokenContract.balanceOf(walletAddress);
   const balanceReadable = ethers.formatUnits(balance, decimals);
-  
+
   console.log(`Token balance: ${balanceReadable}`);
-  
+
   if (balance < amountWei) {
     const amountReadable = ethers.formatUnits(amountWei, decimals);
-    console.log(`❌ Insufficient balance! Need ${amountReadable} but have ${balanceReadable}`);
+    console.log(
+      `❌ Insufficient balance! Need ${amountReadable} but have ${balanceReadable}`
+    );
     return false;
   }
   return true;
 }
 
-async function approveToken(tokenContract, spenderAddress, amountWei, wallet, decimals) {
+async function approveToken(
+  tokenContract,
+  spenderAddress,
+  amountWei,
+  wallet,
+  decimals
+) {
   // Check current allowance (for info only)
-  const currentAllowance = await tokenContract.allowance(wallet.address, spenderAddress);
-  console.log(`Current allowance: ${ethers.formatUnits(currentAllowance, decimals)}`);
-  
+  const currentAllowance = await tokenContract.allowance(
+    wallet.address,
+    spenderAddress
+  );
+  console.log(
+    `Current allowance: ${ethers.formatUnits(currentAllowance, decimals)}`
+  );
+
   // If allowance is sufficient, skip approval
   if (currentAllowance >= amountWei) {
-    console.log('✅ Sufficient allowance already exists');
+    console.log("✅ Sufficient allowance already exists");
     return { hash: null, success: true };
   }
-  
+
   console.log("Approving tokens...");
-  
+
   // Estimate gas
   let gasLimit;
   try {
-    const gasEstimate = await tokenContract.approve.estimateGas(spenderAddress, amountWei);
-    gasLimit = gasEstimate * 120n / 100n; // Add 20% buffer
+    const gasEstimate = await tokenContract.approve.estimateGas(
+      spenderAddress,
+      amountWei
+    );
+    gasLimit = (gasEstimate * 120n) / 100n; // Add 20% buffer
   } catch (e) {
     console.log(`⚠ Gas estimation failed, using fallback: 100000`);
     gasLimit = 100000;
   }
-  
+
   // Send approve transaction
   const tx = await tokenContract.approve(spenderAddress, amountWei, {
-    gasLimit: gasLimit
+    gasLimit: gasLimit,
   });
-  
+
   console.log(`Transaction sent: ${tx.hash}`);
   const receipt = await tx.wait();
-  
+
   console.log(`✓ Approved: ${receipt.hash}`);
   console.log(`  Gas used: ${receipt.gasUsed.toString()}\n`);
-  
+
   await sleep(3000); // Wait for state sync
   return { hash: receipt.hash, success: receipt.status === 1 };
 }
 
-async function swapUniswapV3(swapContract, tokenIn, tokenOut, amountWei, amountOutMin, fee, wallet) {
+async function swapUniswapV3(
+  swapContract,
+  tokenIn,
+  tokenOut,
+  amountWei,
+  amountOutMin,
+  fee,
+  wallet
+) {
   const params = {
     tokenIn: tokenIn,
     tokenOut: tokenOut,
@@ -1590,16 +2066,23 @@ async function swapUniswapV3(swapContract, tokenIn, tokenOut, amountWei, amountO
     recipient: wallet.address,
     amountIn: amountWei,
     amountOutMinimum: amountOutMin,
-    sqrtPriceLimitX96: 0
+    sqrtPriceLimitX96: 0,
   };
-  
+
   return swapContract.exactInputSingle.populateTransaction(params);
 }
 
-async function swapUniswapV2(swapContract, tokenIn, tokenOut, amountWei, amountOutMin, wallet) {
+async function swapUniswapV2(
+  swapContract,
+  tokenIn,
+  tokenOut,
+  amountWei,
+  amountOutMin,
+  wallet
+) {
   const deadline = Math.floor(Date.now() / 1000) + 60 * 20; // 20 minutes
   const path = [tokenIn, tokenOut];
-  
+
   return swapContract.swapExactTokensForTokens.populateTransaction(
     amountWei,
     amountOutMin,
@@ -1610,91 +2093,354 @@ async function swapUniswapV2(swapContract, tokenIn, tokenOut, amountWei, amountO
 }
 
 // Enhanced swap endpoint using swap.js logic
-app.post('/swap', async (req, res) => {
+app.post("/swap", async (req, res) => {
   try {
-    const { 
-      privateKey, 
-      tokenIn, 
-      tokenOut, 
-      amountIn, 
+    const {
+      privateKey,
+      tokenIn,
+      tokenOut,
+      amountIn,
       slippageTolerance = 5,
       poolFee = 500,
-      routerType = 'uniswap_v3'
+      routerType = "uniswap_v3",
     } = req.body;
 
+    // Validation
     if (!privateKey || !tokenIn || !tokenOut || !amountIn) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields: privateKey, tokenIn, tokenOut, amountIn'
+        error:
+          "Missing required fields: privateKey, tokenIn, tokenOut, amountIn",
       });
     }
 
-    const provider = new ethers.JsonRpcProvider(SOMNIA_TESTNET_RPC);
+    // Normalize and validate tokenOut address
+    let tokenOutAddress;
+    try {
+      if (typeof tokenOut !== "string") {
+        return res.status(400).json({
+          success: false,
+          error: "tokenOut must be a string address",
+          received: typeof tokenOut,
+        });
+      }
+
+      // Normalize address (remove whitespace)
+      const normalizedTokenOut = tokenOut.trim();
+
+      // Basic format check first
+      if (
+        !normalizedTokenOut.startsWith("0x") ||
+        normalizedTokenOut.length !== 42
+      ) {
+        return res.status(400).json({
+          success: false,
+          error: "Invalid tokenOut address format",
+          received: tokenOut,
+          normalized: normalizedTokenOut,
+          length: normalizedTokenOut.length,
+          hint: "Address must start with 0x and be exactly 42 characters (0x + 40 hex chars)",
+        });
+      }
+
+      // Try to get checksummed address directly
+      // getAddress() will validate the address format and fix checksum if needed
+      try {
+        tokenOutAddress = ethers.getAddress(normalizedTokenOut);
+      } catch (addressError) {
+        // If getAddress fails, try with lowercase version (fixes checksum issues)
+        try {
+          tokenOutAddress = ethers.getAddress(normalizedTokenOut.toLowerCase());
+          console.log(`⚠️  Fixed checksum for tokenOut: ${tokenOutAddress}`);
+        } catch (lowercaseError) {
+          // If both fail, check if it's at least a valid hex format
+          const hexPattern = /^0x[a-fA-F0-9]{40}$/;
+          if (!hexPattern.test(normalizedTokenOut)) {
+            return res.status(400).json({
+              success: false,
+              error: "Invalid tokenOut address format",
+              received: tokenOut,
+              normalized: normalizedTokenOut,
+              details:
+                "Address must be a valid hex string (0x followed by 40 hex characters)",
+              hint: "Ensure the address is a valid Ethereum address",
+            });
+          }
+
+          // If hex format is valid but getAddress fails, use lowercase version
+          tokenOutAddress = normalizedTokenOut.toLowerCase();
+          console.log(
+            `⚠️  Using lowercase address for tokenOut: ${tokenOutAddress}`
+          );
+        }
+      }
+
+      // Final validation - ensure we have a valid address
+      if (!ethers.isAddress(tokenOutAddress)) {
+        return res.status(400).json({
+          success: false,
+          error: "Invalid tokenOut address format after normalization",
+          received: tokenOut,
+          normalized: tokenOutAddress,
+          hint: "Could not validate address format",
+        });
+      }
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid tokenOut address format",
+        details: error.message,
+        received: tokenOut,
+      });
+    }
+
+    // Validate amount
+    const amountNum = parseFloat(amountIn);
+    if (isNaN(amountNum) || amountNum <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: "amountIn must be a positive number",
+      });
+    }
+
+    // Validate slippage tolerance (0-100)
+    const slippage = parseFloat(slippageTolerance);
+    if (isNaN(slippage) || slippage < 0 || slippage > 100) {
+      return res.status(400).json({
+        success: false,
+        error: "slippageTolerance must be a number between 0 and 100",
+      });
+    }
+
+    // Validate router type
+    if (routerType !== "uniswap_v3" && routerType !== "uniswap_v2") {
+      return res.status(400).json({
+        success: false,
+        error: "routerType must be 'uniswap_v3' or 'uniswap_v2'",
+      });
+    }
+
+    const provider = new ethers.JsonRpcProvider(ARBITRUM_SEPOLIA_RPC);
     const wallet = new ethers.Wallet(privateKey, provider);
 
-    const SWAP_ROUTER_ADDRESS = '0x6aac14f090a35eea150705f72d90e4cdc4a49b2c';
+    // Uniswap SwapRouter02 address for Arbitrum Sepolia
+    // Note: Verify this is the correct router address for Arbitrum Sepolia
+    const SWAP_ROUTER_ADDRESS = "0x6aac14f090a35eea150705f72d90e4cdc4a49b2c";
+
+    // Common token addresses on Arbitrum Sepolia testnet
+    // WETH (Wrapped ETH) - used for native token swaps
+    const WETH_ADDRESS = "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1"; // Verify this is correct for Sepolia
+    // USDC testnet address (if available)
+    const USDC_ADDRESS = "0x75faf114eafb1BDbe2F0316DF893fd58cE45D4C7"; // Arbitrum Sepolia USDC (verify)
+
+    // Check if swapping native token (ETH/STT)
+    const isNativeTokenIn =
+      !tokenIn ||
+      (typeof tokenIn === "string" &&
+        (tokenIn.toLowerCase() === "native" ||
+          tokenIn.toLowerCase() === "eth" ||
+          tokenIn === ethers.ZeroAddress));
+
+    // If native token swap, use WETH as intermediary
+    let actualTokenIn = tokenIn;
+    if (isNativeTokenIn) {
+      actualTokenIn = WETH_ADDRESS;
+      console.log(
+        `🔄 Native token swap detected - using WETH (${WETH_ADDRESS}) as intermediary`
+      );
+    } else {
+      // Validate tokenIn address format
+      if (!ethers.isAddress(tokenIn)) {
+        return res.status(400).json({
+          success: false,
+          error:
+            "Invalid tokenIn address format. Use 'native' or 'eth' for native token swaps",
+          received: tokenIn,
+        });
+      }
+      actualTokenIn = ethers.getAddress(tokenIn); // Normalize to checksummed address
+    }
 
     const TOKEN_ABI = [
-      'function approve(address spender, uint256 amount) returns (bool)',
-      'function allowance(address owner, address spender) view returns (uint256)',
-      'function balanceOf(address account) view returns (uint256)',
-      'function decimals() view returns (uint8)'
+      "function approve(address spender, uint256 amount) returns (bool)",
+      "function allowance(address owner, address spender) view returns (uint256)",
+      "function balanceOf(address account) view returns (uint256)",
+      "function decimals() view returns (uint8)",
+      "function symbol() view returns (string)",
+      "function name() view returns (string)",
     ];
 
     const UNISWAP_V3_ROUTER_ABI = [
-      'function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96)) returns (uint256 amountOut)'
+      "function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96)) returns (uint256 amountOut)",
     ];
 
     const UNISWAP_V2_ROUTER_ABI = [
-      'function swapExactTokensForTokens(uint256 amountIn, uint256 amountOutMin, address[] path, address to, uint256 deadline) returns (uint256[] amounts)'
+      "function swapExactTokensForTokens(uint256 amountIn, uint256 amountOutMin, address[] path, address to, uint256 deadline) returns (uint256[] amounts)",
     ];
 
-    console.log(`🔍 Swap request from ${wallet.address}`);
+    console.log(`🔍 Swap request on Arbitrum Sepolia from ${wallet.address}`);
     console.log(`   Token In: ${tokenIn}`);
     console.log(`   Token Out: ${tokenOut}`);
     console.log(`   Amount: ${amountIn}`);
     console.log(`   Router Type: ${routerType}`);
+    console.log(`   Slippage Tolerance: ${slippageTolerance}%`);
 
-    // Create token contracts
-    const tokenInContract = new ethers.Contract(tokenIn, TOKEN_ABI, wallet);
-    const tokenOutContract = new ethers.Contract(tokenOut, TOKEN_ABI, wallet);
-
-    // Get token decimals
-    const decimalsIn = await getTokenDecimals(tokenInContract);
-    const decimalsOut = await getTokenDecimals(tokenOutContract);
-
-    console.log(`Token IN decimals: ${decimalsIn}`);
-    console.log(`Token OUT decimals: ${decimalsOut}`);
-
-    // Parse amounts
-    const amountInWei = ethers.parseUnits(amountIn.toString(), decimalsIn);
-    const amountOutMin = ethers.parseUnits(
-      (Number(amountIn) * (100 - slippageTolerance) / 100).toString(),
-      decimalsOut
-    );
-
-    // Approve first
-    const approveResult = await approveToken(
-      tokenInContract,
-      SWAP_ROUTER_ADDRESS,
-      amountInWei,
-      wallet,
-      decimalsIn
-    );
-
-    if (!approveResult.success) {
+    // Check native balance for gas fees
+    let nativeBalance = await provider.getBalance(wallet.address);
+    if (nativeBalance === 0n) {
       return res.status(400).json({
         success: false,
-        error: 'Token approval failed'
+        error: "Insufficient native token balance for gas fees",
+        currentBalance: ethers.formatEther(nativeBalance),
+        network: "Arbitrum Sepolia",
       });
     }
 
-    // Check balance after approval
-    if (!(await checkBalance(tokenInContract, wallet.address, amountInWei, decimalsIn))) {
+    // Create token contracts
+    // For native token swaps, we don't need to check WETH balance
+    // The router will handle wrapping ETH to WETH during the swap
+    let tokenInContract;
+    if (isNativeTokenIn) {
+      // For native swaps, we'll use WETH address for the swap but don't need to check balance
+      // Create a minimal contract just for getting decimals if needed
+      tokenInContract = new ethers.Contract(actualTokenIn, TOKEN_ABI, wallet);
+    } else {
+      tokenInContract = new ethers.Contract(actualTokenIn, TOKEN_ABI, wallet);
+    }
+
+    const tokenOutContract = new ethers.Contract(
+      tokenOutAddress,
+      TOKEN_ABI,
+      wallet
+    );
+
+    // Get token decimals and symbols
+    let decimalsIn, decimalsOut, symbolIn, symbolOut;
+
+    // For native token, decimals are always 18 - no need to query WETH contract
+    if (isNativeTokenIn) {
+      decimalsIn = 18;
+      symbolIn = "ETH/STT";
+      console.log("💰 Native token swap - using ETH/STT (18 decimals)");
+    } else {
+      // For ERC20 tokens, fetch decimals and symbol
+      try {
+        decimalsIn = await getTokenDecimals(tokenInContract);
+        symbolIn = await tokenInContract.symbol().catch(() => "TOKEN_IN");
+      } catch (error) {
+        return res.status(400).json({
+          success: false,
+          error: "Failed to fetch tokenIn information",
+          details: error.message,
+          tokenIn: tokenIn,
+        });
+      }
+    }
+
+    // Always fetch tokenOut information
+    try {
+      decimalsOut = await getTokenDecimals(tokenOutContract);
+      symbolOut = await tokenOutContract.symbol().catch(() => "TOKEN_OUT");
+    } catch (error) {
       return res.status(400).json({
         success: false,
-        error: 'Insufficient token balance'
+        error: "Failed to fetch tokenOut information",
+        details: error.message,
+        tokenOut: tokenOutAddress,
+        hint: "The tokenOut address might not be a valid ERC20 token contract",
       });
+    }
+
+    console.log(`Token IN (${symbolIn}) decimals: ${decimalsIn}`);
+    console.log(`Token OUT (${symbolOut}) decimals: ${decimalsOut}`);
+
+    // Parse amounts
+    const amountInWei = ethers.parseUnits(amountIn.toString(), decimalsIn);
+
+    // Note: amountOutMin calculation is simplified - in production, you'd want to query
+    // the actual expected output from the DEX router/quote function
+    // For now, we use a conservative estimate based on slippage
+    const amountOutMin = ethers.parseUnits(
+      ((Number(amountIn) * (100 - slippage)) / 100).toString(),
+      decimalsOut
+    );
+
+    console.log(
+      `Amount In: ${amountIn} ${symbolIn} (${amountInWei.toString()} wei)`
+    );
+    console.log(
+      `Minimum Amount Out: ${ethers.formatUnits(
+        amountOutMin,
+        decimalsOut
+      )} ${symbolOut} (${amountOutMin.toString()} wei)`
+    );
+
+    // Check balance before approval
+    let tokenBalance = null;
+    let approveResult = { hash: null, success: true }; // Initialize for native token swaps
+
+    if (isNativeTokenIn) {
+      // For native token, check ETH balance (reuse nativeBalance from above)
+      nativeBalance = await provider.getBalance(wallet.address);
+      if (nativeBalance < amountInWei) {
+        return res.status(400).json({
+          success: false,
+          error: "Insufficient native token balance",
+          tokenIn: "ETH/STT (native)",
+          currentBalance: ethers.formatEther(nativeBalance),
+          requestedAmount: amountIn.toString(),
+          network: "Arbitrum Sepolia",
+        });
+      }
+
+      // For native token swaps, we need to wrap ETH to WETH first
+      // The Uniswap router can handle this, but we need to send ETH as value
+      // No approval needed for native tokens
+      console.log(`💰 Native token swap - will wrap ETH to WETH during swap`);
+      approveResult = {
+        hash: null,
+        success: true,
+        note: "No approval needed for native token swaps",
+      };
+    } else {
+      // For ERC20 tokens, check balance and approve
+      tokenBalance = await tokenInContract.balanceOf(wallet.address);
+      if (tokenBalance < amountInWei) {
+        return res.status(400).json({
+          success: false,
+          error: "Insufficient token balance",
+          tokenIn: tokenIn,
+          tokenSymbol: symbolIn,
+          currentBalance: ethers.formatUnits(tokenBalance, decimalsIn),
+          requestedAmount: amountIn.toString(),
+          network: "Arbitrum Sepolia",
+        });
+      }
+
+      // Approve tokens for swap router
+      console.log(`Approving ${symbolIn} tokens for swap router...`);
+      approveResult = await approveToken(
+        tokenInContract,
+        SWAP_ROUTER_ADDRESS,
+        amountInWei,
+        wallet,
+        decimalsIn
+      );
+
+      if (!approveResult.success) {
+        return res.status(400).json({
+          success: false,
+          error: "Token approval failed",
+          details: "Could not approve tokens for swap router",
+          network: "Arbitrum Sepolia",
+        });
+      }
+
+      if (approveResult.hash) {
+        console.log(`✅ Approval transaction: ${approveResult.hash}`);
+      } else {
+        console.log(`✅ Sufficient allowance already exists`);
+      }
     }
 
     // Build swap transaction based on router type
@@ -1703,31 +2449,50 @@ app.post('/swap', async (req, res) => {
     let swapContract;
 
     try {
-      if (routerType === 'uniswap_v3') {
-        swapContract = new ethers.Contract(SWAP_ROUTER_ADDRESS, UNISWAP_V3_ROUTER_ABI, wallet);
+      if (routerType === "uniswap_v3") {
+        swapContract = new ethers.Contract(
+          SWAP_ROUTER_ADDRESS,
+          UNISWAP_V3_ROUTER_ABI,
+          wallet
+        );
+        // For native token swaps, use WETH address
         swapTx = await swapUniswapV3(
           swapContract,
-          tokenIn,
-          tokenOut,
+          actualTokenIn, // Use WETH if native token
+          tokenOutAddress, // Use checksummed address
           amountInWei,
           amountOutMin,
           poolFee,
           wallet
         );
-      } else if (routerType === 'uniswap_v2') {
-        swapContract = new ethers.Contract(SWAP_ROUTER_ADDRESS, UNISWAP_V2_ROUTER_ABI, wallet);
+
+        // For native token swaps, add value to transaction
+        if (isNativeTokenIn) {
+          swapTx.value = amountInWei;
+        }
+      } else if (routerType === "uniswap_v2") {
+        swapContract = new ethers.Contract(
+          SWAP_ROUTER_ADDRESS,
+          UNISWAP_V2_ROUTER_ABI,
+          wallet
+        );
         swapTx = await swapUniswapV2(
           swapContract,
-          tokenIn,
-          tokenOut,
+          actualTokenIn, // Use WETH if native token
+          tokenOutAddress, // Use checksummed address
           amountInWei,
           amountOutMin,
           wallet
         );
+
+        // For native token swaps, add value to transaction
+        if (isNativeTokenIn) {
+          swapTx.value = amountInWei;
+        }
       } else {
         return res.status(400).json({
           success: false,
-          error: `Unknown router type: ${routerType}. Use 'uniswap_v3' or 'uniswap_v2'`
+          error: `Unknown router type: ${routerType}. Use 'uniswap_v3' or 'uniswap_v2'`,
         });
       }
 
@@ -1735,221 +2500,604 @@ app.post('/swap', async (req, res) => {
       try {
         const gasEstimate = await provider.estimateGas({
           ...swapTx,
-          from: wallet.address
+          from: wallet.address,
         });
-        
-        const gasLimit = gasEstimate * 150n / 100n; // Add 50% buffer
-        console.log(`Estimated gas: ${gasEstimate.toString()}, Using: ${gasLimit.toString()}`);
-        
+
+        const gasLimit = (gasEstimate * 150n) / 100n; // Add 50% buffer
+        console.log(
+          `Estimated gas: ${gasEstimate.toString()}, Using: ${gasLimit.toString()}`
+        );
+
         swapTx.gasLimit = gasLimit;
       } catch (e) {
         console.log(`⚠ Gas estimation failed: ${e.message.substring(0, 150)}`);
         console.log("Using fallback gas: 1000000");
         swapTx.gasLimit = 1000000;
       }
-
     } catch (e) {
       throw new Error(`Failed to build swap transaction: ${e.message}`);
     }
 
     // Execute swap
     console.log("Executing swap...");
-    
+
     const tx = await wallet.sendTransaction(swapTx);
     console.log(`Transaction sent: ${tx.hash}`);
-    
+
     const receipt = await tx.wait();
 
     if (receipt.status === 1) {
+      // Get final balances for verification
+      let balanceInAfter = null;
+      let balanceOutAfter = null;
+
+      // For native token swaps, skip balance check (WETH might not exist on testnet)
+      if (!isNativeTokenIn) {
+        try {
+          balanceInAfter = await tokenInContract.balanceOf(wallet.address);
+        } catch (error) {
+          console.warn(
+            "Could not fetch tokenIn balance after swap:",
+            error.message
+          );
+        }
+      } else {
+        // For native token, get ETH balance instead
+        try {
+          const nativeBalance = await provider.getBalance(wallet.address);
+          balanceInAfter = nativeBalance;
+        } catch (error) {
+          console.warn(
+            "Could not fetch native balance after swap:",
+            error.message
+          );
+        }
+      }
+
+      try {
+        balanceOutAfter = await tokenOutContract.balanceOf(wallet.address);
+      } catch (error) {
+        console.warn(
+          "Could not fetch tokenOut balance after swap:",
+          error.message
+        );
+      }
+
       return res.json({
         success: true,
+        network: "Arbitrum Sepolia",
         wallet: wallet.address,
-        tokenIn,
-        tokenOut,
-        amountIn: amountIn.toString(),
-        slippageTolerance,
-        routerType,
-        approveTxHash: approveResult.hash,
-        swapTxHash: receipt.hash,
-        blockNumber: receipt.blockNumber,
-        gasUsed: receipt.gasUsed.toString(),
-        explorerUrl: `https://shannon-explorer.somnia.network/tx/${receipt.hash}`
+        swap: {
+          tokenIn: {
+            address: tokenIn,
+            symbol: symbolIn,
+            amountIn: amountIn.toString(),
+            decimals: Number(decimalsIn),
+          },
+          tokenOut: {
+            address: tokenOutAddress,
+            symbol: symbolOut,
+            decimals: Number(decimalsOut),
+          },
+          slippageTolerance: `${slippageTolerance}%`,
+          routerType: routerType,
+          poolFee:
+            routerType === "uniswap_v3"
+              ? `${poolFee} (${poolFee / 10000}%)`
+              : null,
+        },
+        transactions: {
+          approval: approveResult.hash
+            ? {
+                hash: approveResult.hash,
+                explorerUrl: `https://sepolia.arbiscan.io/tx/${approveResult.hash}`,
+              }
+            : {
+                note: "Approval not needed - sufficient allowance exists",
+              },
+          swap: {
+            hash: receipt.hash,
+            blockNumber: receipt.blockNumber
+              ? Number(receipt.blockNumber)
+              : null,
+            gasUsed: receipt.gasUsed ? receipt.gasUsed.toString() : null,
+            gasPrice: receipt.gasPrice ? receipt.gasPrice.toString() : null,
+            explorerUrl: `https://sepolia.arbiscan.io/tx/${receipt.hash}`,
+          },
+        },
+        balances: {
+          tokenIn: isNativeTokenIn
+            ? {
+                before: ethers.formatEther(nativeBalance.toString()),
+                after: balanceInAfter
+                  ? ethers.formatEther(balanceInAfter.toString())
+                  : "N/A",
+                note: "Native token balance (ETH/STT)",
+              }
+            : {
+                before: tokenBalance
+                  ? ethers.formatUnits(tokenBalance.toString(), decimalsIn)
+                  : "N/A",
+                after: balanceInAfter
+                  ? ethers.formatUnits(balanceInAfter.toString(), decimalsIn)
+                  : "N/A",
+              },
+          tokenOut: {
+            after: balanceOutAfter
+              ? ethers.formatUnits(balanceOutAfter.toString(), decimalsOut)
+              : "N/A",
+          },
+        },
       });
     } else {
       return res.status(500).json({
         success: false,
-        error: 'Swap transaction failed'
+        error: "Swap transaction failed",
+        transactionHash: receipt.hash,
+        network: "Arbitrum Sepolia",
+      });
+    }
+  } catch (error) {
+    console.error("Swap error:", error);
+
+    // Provide more specific error messages
+    if (error.reason && error.reason.includes("STF")) {
+      return res.status(400).json({
+        success: false,
+        error: "Swap failed - insufficient liquidity or invalid pool",
+        details:
+          "The swap may have failed due to insufficient liquidity in the pool or invalid token pair",
+        network: "Arbitrum Sepolia",
       });
     }
 
-  } catch (error) {
-    console.error('Swap error:', error);
+    if (error.reason && error.reason.includes("SPL")) {
+      return res.status(400).json({
+        success: false,
+        error: "Swap failed - slippage tolerance exceeded",
+        details:
+          "The price moved beyond your slippage tolerance. Try increasing slippageTolerance or reducing amountIn",
+        network: "Arbitrum Sepolia",
+      });
+    }
+
     return res.status(500).json({
       success: false,
       error: error.message,
-      details: error.reason || error.code
+      details: error.reason || error.code,
+      network: "Arbitrum Sepolia",
     });
   }
 });
 
-app.get('/balance/:address/:token', async (req, res) => {
+// Wallet Analytics endpoint - Comprehensive wallet analysis using Alchemy API
+app.post("/wallet-analytics", async (req, res) => {
   try {
-    const provider = new ethers.JsonRpcProvider(SOMNIA_TESTNET_RPC);
-    const tokenAbi = [
-      'function balanceOf(address) view returns (uint256)',
-      'function decimals() view returns (uint8)',
-      'function symbol() view returns (string)',
-      'function name() view returns (string)'
-    ];
-    
-    const contract = new ethers.Contract(req.params.token, tokenAbi, provider);
-    const balance = await contract.balanceOf(req.params.address);
-    const decimals = await contract.decimals();
-    const symbol = await contract.symbol();
-    const name = await contract.name();
-    
-    res.json({
-      address: req.params.address,
-      token: req.params.token,
-      name,
-      symbol,
-      balance: ethers.formatUnits(balance, decimals),
-      balanceWei: balance.toString(),
-      decimals: Number(decimals)
+    const { address } = req.body;
+
+    // Validation
+    if (!address) {
+      return res.status(400).json({
+        success: false,
+        error: "Missing required field: address",
+      });
+    }
+
+    // Validate address format
+    if (!ethers.isAddress(address)) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid wallet address format",
+      });
+    }
+
+    // Check if Alchemy API key is available
+    const ALCHEMY_API_KEY = process.env.ALCHEMY_API_KEY;
+    let alchemyRpcUrl = null;
+
+    if (ALCHEMY_API_KEY) {
+      alchemyRpcUrl = `https://arb-sepolia.g.alchemy.com/v2/${ALCHEMY_API_KEY}`;
+    }
+
+    console.log(`🔍 Fetching wallet analytics for: ${address}`);
+
+    // Helper function to get ETH balance
+    async function getEthBalance(walletAddress, rpcUrl) {
+      try {
+        if (rpcUrl) {
+          // Use Alchemy RPC
+          const response = await axios.post(rpcUrl, {
+            jsonrpc: "2.0",
+            id: 1,
+            method: "eth_getBalance",
+            params: [walletAddress, "latest"],
+          });
+
+          if (response.data.error) {
+            throw new Error(response.data.error.message);
+          }
+
+          const balanceWei = BigInt(response.data.result);
+          const balanceEth = Number(balanceWei) / 1e18;
+          return balanceEth;
+        } else {
+          // Fallback to standard provider
+          const provider = new ethers.JsonRpcProvider(ARBITRUM_SEPOLIA_RPC);
+          const balance = await provider.getBalance(walletAddress);
+          return parseFloat(ethers.formatEther(balance));
+        }
+      } catch (error) {
+        console.error("Error fetching ETH balance:", error.message);
+        // Fallback to standard provider
+        try {
+          const provider = new ethers.JsonRpcProvider(ARBITRUM_SEPOLIA_RPC);
+          const balance = await provider.getBalance(walletAddress);
+          return parseFloat(ethers.formatEther(balance));
+        } catch (fallbackError) {
+          return 0;
+        }
+      }
+    }
+
+    // Helper function to get token metadata
+    async function getTokenMetadata(contractAddress, rpcUrl) {
+      try {
+        if (rpcUrl) {
+          const response = await axios.post(rpcUrl, {
+            jsonrpc: "2.0",
+            id: 1,
+            method: "alchemy_getTokenMetadata",
+            params: [contractAddress],
+          });
+
+          if (response.data.error) {
+            throw new Error(response.data.error.message);
+          }
+
+          return response.data.result;
+        } else {
+          // Fallback: use ethers to get basic token info
+          const provider = new ethers.JsonRpcProvider(ARBITRUM_SEPOLIA_RPC);
+          const tokenAbi = [
+            "function name() view returns (string)",
+            "function symbol() view returns (string)",
+            "function decimals() view returns (uint8)",
+          ];
+
+          try {
+            const contract = new ethers.Contract(
+              contractAddress,
+              tokenAbi,
+              provider
+            );
+            const [name, symbol, decimals] = await Promise.all([
+              contract.name().catch(() => "Unknown"),
+              contract.symbol().catch(() => "UNKNOWN"),
+              contract.decimals().catch(() => 18),
+            ]);
+
+            return { name, symbol, decimals: Number(decimals) };
+          } catch (contractError) {
+            return { name: "Unknown", symbol: "UNKNOWN", decimals: 18 };
+          }
+        }
+      } catch (error) {
+        console.error(
+          `Error fetching metadata for ${contractAddress}:`,
+          error.message
+        );
+        return { name: "Unknown", symbol: "UNKNOWN", decimals: 18 };
+      }
+    }
+
+    // Get ETH balance
+    const ethBalance = await getEthBalance(address, alchemyRpcUrl);
+
+    // Get all ERC20 token balances
+    let tokenBalances = [];
+    let allTokens = [];
+
+    if (alchemyRpcUrl) {
+      // Use Alchemy API to get all ERC20 tokens
+      try {
+        console.log("📡 Using Alchemy API to fetch token balances...");
+        const response = await axios.post(alchemyRpcUrl, {
+          jsonrpc: "2.0",
+          id: 1,
+          method: "alchemy_getTokenBalances",
+          params: [address, "erc20"],
+        });
+
+        if (response.data.error) {
+          throw new Error(response.data.error.message);
+        }
+
+        allTokens = response.data.result.tokenBalances || [];
+        console.log(`Found ${allTokens.length} tokens via Alchemy API`);
+      } catch (alchemyError) {
+        console.warn(
+          "Alchemy API failed, falling back to standard RPC:",
+          alchemyError.message
+        );
+        // Fallback: return empty array - user can query specific tokens if needed
+        allTokens = [];
+      }
+    } else {
+      console.log(
+        "⚠️  ALCHEMY_API_KEY not set - cannot fetch all tokens automatically"
+      );
+      console.log(
+        "   Set ALCHEMY_API_KEY in .env to enable comprehensive token discovery"
+      );
+    }
+
+    // Process tokens and get metadata for non-zero balances
+    const nonZeroBalances = [];
+
+    for (const token of allTokens) {
+      const balance = BigInt(token.tokenBalance || "0");
+
+      if (balance > 0n) {
+        // Get token metadata
+        const metadata = await getTokenMetadata(
+          token.contractAddress,
+          alchemyRpcUrl
+        );
+
+        const decimals = metadata.decimals || 18;
+        const humanReadableBalance = Number(balance) / Math.pow(10, decimals);
+
+        nonZeroBalances.push({
+          contractAddress: token.contractAddress,
+          name: metadata.name || "Unknown",
+          symbol: metadata.symbol || "UNKNOWN",
+          balance: humanReadableBalance,
+          balanceFormatted: humanReadableBalance.toFixed(6),
+          rawBalance: token.tokenBalance,
+          decimals: decimals,
+        });
+      }
+    }
+
+    // Calculate summary statistics
+    const totalTokens = nonZeroBalances.length;
+    const totalTokenValue = nonZeroBalances.reduce(
+      (sum, token) => sum + token.balance,
+      0
+    );
+
+    // Sort tokens by balance (descending)
+    const sortedTokens = nonZeroBalances.sort((a, b) => b.balance - a.balance);
+
+    return res.json({
+      success: true,
+      address: address,
+      network: "Arbitrum Sepolia",
+      timestamp: new Date().toISOString(),
+      analytics: {
+        nativeBalance: {
+          balance: ethBalance,
+          balanceFormatted: ethBalance.toFixed(6),
+          symbol: "ETH/STT",
+          unit: "ETH",
+        },
+        tokens: {
+          total: totalTokens,
+          nonZero: nonZeroBalances.length,
+          list: sortedTokens,
+        },
+        summary: {
+          nativeBalance: `${ethBalance.toFixed(6)} ETH`,
+          totalTokens: totalTokens,
+          totalTokenTypes: allTokens.length,
+          hasTokens: totalTokens > 0,
+        },
+      },
+      metadata: {
+        dataSource: alchemyRpcUrl ? "Alchemy API" : "Standard RPC",
+        note: alchemyRpcUrl
+          ? "Comprehensive token discovery enabled via Alchemy API"
+          : "Set ALCHEMY_API_KEY in .env to enable automatic token discovery",
+      },
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.get('/balance/:address', async (req, res) => {
-  try {
-    const provider = new ethers.JsonRpcProvider(SOMNIA_TESTNET_RPC);
-    const balance = await provider.getBalance(req.params.address);
-    
-    res.json({
-      address: req.params.address,
-      balance: ethers.formatEther(balance),
-      balanceWei: balance.toString()
+    console.error("Wallet analytics error:", error);
+    return res.status(500).json({
+      success: false,
+      error: error.message,
+      details: error.response?.data || error.code,
     });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
   }
 });
 
-// Airdrop endpoint - batch transfer STT tokens to multiple addresses
-app.post('/airdrop', async (req, res) => {
+// Airdrop endpoint - batch transfer ETH to multiple addresses (Arbitrum Sepolia)
+// Supports both same amount and different amounts per recipient
+app.post("/airdrop", async (req, res) => {
   try {
-    const { 
-      privateKey, 
-      recipients, 
-      amount 
+    const {
+      privateKey,
+      recipients,
+      amount, // For same amount per recipient
+      amounts, // For different amounts per recipient (array)
     } = req.body;
 
     // Validation
-    if (!privateKey || !recipients || !amount) {
+    if (!privateKey || !recipients) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields: privateKey, recipients, amount'
+        error: "Missing required fields: privateKey, recipients",
       });
     }
 
     if (!Array.isArray(recipients) || recipients.length === 0) {
       return res.status(400).json({
         success: false,
-        error: 'recipients must be a non-empty array of addresses'
-      });
-    }
-
-    if (Number(amount) <= 0 || isNaN(Number(amount))) {
-      return res.status(400).json({
-        success: false,
-        error: 'amount must be a positive number'
+        error: "recipients must be a non-empty array of addresses",
       });
     }
 
     // Validate all recipient addresses
-    const invalidAddresses = recipients.filter(addr => !ethers.isAddress(addr));
+    const invalidAddresses = recipients.filter(
+      (addr) => !ethers.isAddress(addr)
+    );
     if (invalidAddresses.length > 0) {
       return res.status(400).json({
         success: false,
-        error: 'Invalid recipient addresses found',
-        invalidAddresses: invalidAddresses
+        error: "Invalid recipient addresses found",
+        invalidAddresses: invalidAddresses,
       });
     }
 
-    const provider = new ethers.JsonRpcProvider(SOMNIA_TESTNET_RPC);
+    // Determine which airdrop function to use
+    const useDifferentAmounts = Array.isArray(amounts) && amounts.length > 0;
+
+    if (
+      !useDifferentAmounts &&
+      (!amount || Number(amount) <= 0 || isNaN(Number(amount)))
+    ) {
+      return res.status(400).json({
+        success: false,
+        error:
+          "Either provide amount (for same amount) or amounts array (for different amounts)",
+      });
+    }
+
+    if (useDifferentAmounts) {
+      if (amounts.length !== recipients.length) {
+        return res.status(400).json({
+          success: false,
+          error: "amounts array length must match recipients array length",
+        });
+      }
+
+      const invalidAmounts = amounts.filter(
+        (amt) => Number(amt) <= 0 || isNaN(Number(amt))
+      );
+      if (invalidAmounts.length > 0) {
+        return res.status(400).json({
+          success: false,
+          error: "All amounts must be positive numbers",
+        });
+      }
+    }
+
+    const provider = new ethers.JsonRpcProvider(ARBITRUM_SEPOLIA_RPC);
     const wallet = new ethers.Wallet(privateKey, provider);
+
+    // Calculate total amount needed
+    let totalAmount;
+    let amountPerRecipient;
+    let amountsArray;
+
+    if (useDifferentAmounts) {
+      // Different amounts per recipient
+      amountsArray = amounts.map((amt) => ethers.parseEther(amt.toString()));
+      totalAmount = amountsArray.reduce((sum, amt) => sum + amt, 0n);
+    } else {
+      // Same amount per recipient
+      amountPerRecipient = ethers.parseEther(amount.toString());
+      totalAmount = amountPerRecipient * BigInt(recipients.length);
+    }
 
     // Check wallet balance
     const walletBalance = await provider.getBalance(wallet.address);
-    const amountPerRecipient = ethers.parseEther(amount.toString());
-    const totalAmount = amountPerRecipient * BigInt(recipients.length);
 
-    console.log('Airdrop request:', {
+    console.log("Airdrop request:", {
       from: wallet.address,
       recipients: recipients.length,
-      amountPerRecipient: amount,
-      totalAmount: ethers.formatEther(totalAmount)
+      useDifferentAmounts: useDifferentAmounts,
+      amountPerRecipient: useDifferentAmounts ? "varies" : amount,
+      totalAmount: ethers.formatEther(totalAmount),
     });
 
     if (walletBalance < totalAmount) {
       return res.status(400).json({
         success: false,
-        error: 'Insufficient balance',
+        error: "Insufficient balance",
         walletBalance: ethers.formatEther(walletBalance),
         required: ethers.formatEther(totalAmount),
-        shortage: ethers.formatEther(totalAmount - walletBalance)
+        shortage: ethers.formatEther(totalAmount - walletBalance),
       });
     }
 
     // Connect to Airdrop contract
-    const airdropContract = new ethers.Contract(AIRDROP_CONTRACT_ADDRESS, AIRDROP_ABI, wallet);
+    const airdropContract = new ethers.Contract(
+      AIRDROP_CONTRACT_ADDRESS,
+      AIRDROP_ABI,
+      wallet
+    );
 
-    // Estimate gas
-    console.log('Estimating gas for airdrop...');
+    // Estimate gas and execute airdrop
+    console.log("Estimating gas for airdrop...");
     let gasEstimate;
     try {
-      gasEstimate = await airdropContract.airdrop.estimateGas(recipients, amountPerRecipient, {
-        value: totalAmount
-      });
-      console.log('Estimated gas:', gasEstimate.toString());
+      if (useDifferentAmounts) {
+        gasEstimate = await airdropContract.airdropWithAmounts.estimateGas(
+          recipients,
+          amountsArray,
+          {
+            value: totalAmount,
+          }
+        );
+      } else {
+        gasEstimate = await airdropContract.airdrop.estimateGas(
+          recipients,
+          amountPerRecipient,
+          {
+            value: totalAmount,
+          }
+        );
+      }
+      console.log("Estimated gas:", gasEstimate.toString());
     } catch (estimateError) {
-      console.warn('Gas estimation failed (will proceed anyway):', estimateError.message);
+      console.warn(
+        "Gas estimation failed (will proceed anyway):",
+        estimateError.message
+      );
       gasEstimate = null;
     }
 
     // Execute airdrop
-    console.log('Executing airdrop transaction...');
+    console.log("Executing airdrop transaction...");
     let tx;
+    const txOptions = {
+      value: totalAmount,
+    };
+
     if (gasEstimate) {
       // Add 20% buffer to gas estimate
-      const gasLimit = (gasEstimate * 120n) / 100n;
-      tx = await airdropContract.airdrop(recipients, amountPerRecipient, {
-        value: totalAmount,
-        gasLimit
-      });
-    } else {
-      tx = await airdropContract.airdrop(recipients, amountPerRecipient, {
-        value: totalAmount
-      });
+      txOptions.gasLimit = (gasEstimate * 120n) / 100n;
     }
 
-    console.log('Transaction hash:', tx.hash);
-    console.log('Waiting for confirmation...');
+    if (useDifferentAmounts) {
+      tx = await airdropContract.airdropWithAmounts(
+        recipients,
+        amountsArray,
+        txOptions
+      );
+    } else {
+      tx = await airdropContract.airdrop(
+        recipients,
+        amountPerRecipient,
+        txOptions
+      );
+    }
+
+    console.log("Transaction hash:", tx.hash);
+    console.log("Waiting for confirmation...");
 
     // Wait for the transaction to be mined
     const receipt = await tx.wait();
-    console.log('Transaction confirmed in block:', receipt.blockNumber);
+    console.log("Transaction confirmed in block:", receipt.blockNumber);
 
     // Parse the AirdropExecuted event
     const contractInterface = new ethers.Interface(AIRDROP_ABI);
     let eventData = null;
-    
+
     for (const log of receipt.logs) {
       try {
         const parsedLog = contractInterface.parseLog(log);
-        if (parsedLog && parsedLog.name === 'AirdropExecuted') {
+        if (parsedLog && parsedLog.name === "AirdropExecuted") {
           eventData = parsedLog.args;
           break;
         }
@@ -1965,43 +3113,61 @@ app.post('/airdrop', async (req, res) => {
     const walletBalanceAfter = await provider.getBalance(wallet.address);
     const balanceUsed = walletBalance - walletBalanceAfter;
 
-    return res.json({
+    // Prepare response data
+    const responseData = {
       success: true,
-      message: 'Airdrop executed successfully',
+      message: "Airdrop executed successfully",
       airdrop: {
         from: wallet.address,
         recipientsCount: recipients.length,
         recipients: recipients,
-        amountPerRecipient: amount,
-        amountPerRecipientWei: amountPerRecipient.toString(),
+        method: useDifferentAmounts ? "airdropWithAmounts" : "airdrop",
         totalAmount: ethers.formatEther(totalAmount),
-        totalAmountWei: totalAmount.toString()
+        totalAmountWei: totalAmount.toString(),
       },
       transaction: {
         hash: receipt.hash,
         blockNumber: receipt.blockNumber,
         gasUsed: receipt.gasUsed.toString(),
-        explorerUrl: `https://shannon-explorer.somnia.network/tx/${receipt.hash}`
+        explorerUrl: `https://sepolia.arbiscan.io/tx/${receipt.hash}`,
       },
       balances: {
         walletBefore: ethers.formatEther(walletBalance),
         walletAfter: ethers.formatEther(walletBalanceAfter),
         balanceUsed: ethers.formatEther(balanceUsed),
-        contractBalance: ethers.formatEther(contractBalance)
+        contractBalance: ethers.formatEther(contractBalance),
       },
-      event: eventData ? {
-        executor: eventData.executor,
-        totalAmount: eventData.totalAmount.toString(),
-        timestamp: new Date(Number(eventData.timestamp) * 1000).toISOString()
-      } : null
-    });
+      event: eventData
+        ? {
+            executor: eventData.executor,
+            totalAmount: eventData.totalAmount.toString(),
+            timestamp: new Date(
+              Number(eventData.timestamp) * 1000
+            ).toISOString(),
+          }
+        : null,
+    };
 
+    // Add amount details based on method used
+    if (useDifferentAmounts) {
+      responseData.airdrop.amounts = amounts.map((amt, idx) => ({
+        recipient: recipients[idx],
+        amount: amt,
+        amountWei: amountsArray[idx].toString(),
+      }));
+    } else {
+      responseData.airdrop.amountPerRecipient = amount;
+      responseData.airdrop.amountPerRecipientWei =
+        amountPerRecipient.toString();
+    }
+
+    return res.json(responseData);
   } catch (error) {
-    console.error('Airdrop error:', error);
+    console.error("Airdrop error:", error);
     return res.status(500).json({
       success: false,
       error: error.message,
-      details: error.reason || error.code
+      details: error.reason || error.code,
     });
   }
 });
@@ -2010,7 +3176,7 @@ app.post('/airdrop', async (req, res) => {
 let openaiClient = null;
 if (process.env.OPENAI_API_KEY) {
   openaiClient = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY
+    apiKey: process.env.OPENAI_API_KEY,
   });
 }
 
@@ -2035,29 +3201,29 @@ INSTRUCTIONS:
 Be accurate, understand the query intent, and use the most current prices available from authoritative sources.`;
 
 // Token price endpoint - fetch current token prices using natural language queries
-app.post('/token-price', async (req, res) => {
+app.post("/token-price", async (req, res) => {
   try {
     const { query } = req.body;
 
     // Validation
-    if (!query || typeof query !== 'string' || !query.trim()) {
+    if (!query || typeof query !== "string" || !query.trim()) {
       return res.status(400).json({
         success: false,
-        error: 'query is required and must be a non-empty string'
+        error: "query is required and must be a non-empty string",
       });
     }
 
     if (query.length > 500) {
       return res.status(400).json({
         success: false,
-        error: 'Query too long (max 500 characters)'
+        error: "Query too long (max 500 characters)",
       });
     }
 
     if (!openaiClient) {
       return res.status(500).json({
         success: false,
-        error: 'OPENAI_API_KEY not configured. Please set it in your .env file'
+        error: "OPENAI_API_KEY not configured. Please set it in your .env file",
       });
     }
 
@@ -2065,21 +3231,21 @@ app.post('/token-price', async (req, res) => {
 
     // Use OpenAI's web search model
     const completion = await openaiClient.chat.completions.create({
-      model: 'gpt-4o-search-preview',
+      model: "gpt-4o-search-preview",
       messages: [
         {
-          role: 'system',
-          content: PRICE_SYSTEM_PROMPT
+          role: "system",
+          content: PRICE_SYSTEM_PROMPT,
         },
         {
-          role: 'user',
-          content: query
-        }
-      ]
+          role: "user",
+          content: query,
+        },
+      ],
     });
 
     const response = completion.choices[0].message.content;
-    
+
     // Log the raw response for debugging
     console.log(`📄 Raw response from OpenAI:`, response.substring(0, 500)); // Log first 500 chars
 
@@ -2089,136 +3255,29 @@ app.post('/token-price', async (req, res) => {
       query: query,
       response: response,
       timestamp: new Date().toISOString(),
-      model_used: 'gpt-4o-search-preview'
+      model_used: "gpt-4o-search-preview",
     });
-
   } catch (error) {
-    console.error('Token price error:', error);
+    console.error("Token price error:", error);
     return res.status(500).json({
       success: false,
-      error: error.message || 'Error fetching token prices',
-      details: error.response?.data || error.code
+      error: error.message || "Error fetching token prices",
+      details: error.response?.data || error.code,
     });
-  }
-});
-
-// ERC-20 balance endpoint - fetch ERC-20 token balances from Somnia API
-app.post('/api/balance/erc20', async (req, res) => {
-  try {
-    const { address } = req.body;
-
-    // Validation
-    if (!address) {
-      return res.status(400).json({
-        success: false,
-        error: 'Missing required field: address'
-      });
-    }
-
-    // Validate address format
-    if (!ethers.isAddress(address)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid wallet address format'
-      });
-    }
-
-    // Somnia API endpoint
-    const somniaApiUrl = `https://api.subgraph.somnia.network/public_api/data_api/somnia/v1/address/${address}/balance/erc20`;
-    
-    console.log(`🔍 Fetching ERC-20 balances for address: ${address}`);
-    console.log(`📡 API URL: ${somniaApiUrl}`);
-
-    // Prepare headers
-    const headers = {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json'
-    };
-
-    // Load bearer token from .env file
-    const bearerToken = process.env.BEARER_TOKEN || process.env.ORMI_API_KEY || process.env.PRIVATE_KEY;
-    if (bearerToken) {
-      headers['Authorization'] = `Bearer ${bearerToken}`;
-      console.log('🔑 Using bearer token authentication');
-    } else {
-      console.log('⚠️  No bearer token found in .env - making unauthenticated request');
-      console.log('   Set BEARER_TOKEN, ORMI_API_KEY, or PRIVATE_KEY in your .env file');
-    }
-
-    // Make GET request to Somnia API
-    const response = await axios.get(somniaApiUrl, {
-      headers: headers,
-      timeout: 30000 // 30 second timeout
-    });
-
-    console.log(`✅ API Response Status: ${response.status}`);
-    
-    // Check if API returned an error in the response body
-    if (response.data && response.data.code && response.data.code !== 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'API returned an error',
-        apiError: {
-          code: response.data.code,
-          message: response.data.msg,
-          data: response.data.data
-        },
-        rawResponse: response.data
-      });
-    }
-
-    // Return the API response
-    return res.json({
-      success: true,
-      address: address,
-      data: response.data,
-      timestamp: new Date().toISOString()
-    });
-
-  } catch (error) {
-    console.error('ERC-20 balance fetch error:', error);
-    
-    // Handle axios errors
-    if (error.response) {
-      // API returned an error status
-      return res.status(error.response.status || 500).json({
-        success: false,
-        error: 'Error fetching ERC-20 balances from Somnia API',
-        apiResponse: error.response.data,
-        status: error.response.status
-      });
-    } else if (error.request) {
-      // Request was made but no response received
-      return res.status(500).json({
-        success: false,
-        error: 'No response from Somnia API',
-        message: error.message
-      });
-    } else {
-      // Error setting up the request
-      return res.status(500).json({
-        success: false,
-        error: error.message || 'Error fetching ERC-20 balances'
-      });
-    }
   }
 });
 
 // Yield Calculator endpoint - Create deposit and get yield projections
-app.post('/yield', async (req, res) => {
+app.post("/yield", async (req, res) => {
   try {
-    const { 
-      privateKey, 
-      tokenAddress, 
-      depositAmount, 
-      apyPercent 
-    } = req.body;
+    const { privateKey, tokenAddress, depositAmount, apyPercent } = req.body;
 
     // Validation
     if (!privateKey || !tokenAddress || !depositAmount || !apyPercent) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields: privateKey, tokenAddress, depositAmount, apyPercent'
+        error:
+          "Missing required fields: privateKey, tokenAddress, depositAmount, apyPercent",
       });
     }
 
@@ -2226,7 +3285,7 @@ app.post('/yield', async (req, res) => {
     if (!ethers.isAddress(tokenAddress)) {
       return res.status(400).json({
         success: false,
-        error: 'Invalid token address format'
+        error: "Invalid token address format",
       });
     }
 
@@ -2235,7 +3294,7 @@ app.post('/yield', async (req, res) => {
     if (isNaN(apy) || apy <= 0 || apy > 100) {
       return res.status(400).json({
         success: false,
-        error: 'APY must be a number between 0 and 100'
+        error: "APY must be a number between 0 and 100",
       });
     }
 
@@ -2244,59 +3303,74 @@ app.post('/yield', async (req, res) => {
     if (isNaN(amount) || amount <= 0) {
       return res.status(400).json({
         success: false,
-        error: 'Deposit amount must be a positive number'
+        error: "Deposit amount must be a positive number",
       });
     }
 
-    // Get YieldCalculator contract address from environment
-    const yieldCalculatorAddress = process.env.YIELD_CALCULATOR_ADDRESS;
-    if (!yieldCalculatorAddress) {
-      return res.status(500).json({
-        success: false,
-        error: 'YIELD_CALCULATOR_ADDRESS not configured in environment'
-      });
-    }
-
-    const provider = new ethers.JsonRpcProvider(SOMNIA_TESTNET_RPC);
+    const provider = new ethers.JsonRpcProvider(ARBITRUM_SEPOLIA_RPC);
     const wallet = new ethers.Wallet(privateKey, provider);
 
-    // Initialize YieldCalculatorTool
-    const tool = new YieldCalculatorTool(yieldCalculatorAddress, privateKey);
+    // Initialize YieldCalculatorTool with the contract address
+    const tool = new YieldCalculatorTool(YIELD_CALCULATOR_ADDRESS, privateKey);
 
     // Step 1: Check token balance
     const { token, decimals } = await tool.initializeToken(tokenAddress);
     const tokenBalance = await token.balanceOf(wallet.address);
-    const tokenSymbol = await token.symbol().catch(() => 'TOKEN');
-    const tokenName = await token.name().catch(() => 'Token');
+    const tokenSymbol = await token.symbol().catch(() => "TOKEN");
+    const tokenName = await token.name().catch(() => "Token");
 
     const requiredAmount = tool.parseToken(depositAmount, decimals);
-    
+
     if (tokenBalance < requiredAmount) {
       const balanceFormatted = tool.formatToken(tokenBalance, decimals);
       return res.status(400).json({
         success: false,
-        error: 'Insufficient token balance',
+        error: "Insufficient token balance",
         tokenAddress: tokenAddress,
         tokenSymbol: tokenSymbol,
         currentBalance: balanceFormatted,
-        requiredAmount: depositAmount
+        requiredAmount: depositAmount,
       });
     }
 
     // Step 2: Check and approve tokens if needed
-    const allowance = await token.allowance(wallet.address, yieldCalculatorAddress);
+    const allowance = await token.allowance(
+      wallet.address,
+      YIELD_CALCULATOR_ADDRESS
+    );
     let approvalTxHash = null;
+    let approvalNeeded = false;
 
     if (allowance < requiredAmount) {
+      approvalNeeded = true;
       console.log(`Approving tokens for YieldCalculator...`);
-      const approveTx = await token.approve(yieldCalculatorAddress, ethers.MaxUint256);
+      const approveTx = await token.approve(
+        YIELD_CALCULATOR_ADDRESS,
+        ethers.MaxUint256
+      );
       const approveReceipt = await approveTx.wait();
       approvalTxHash = approveReceipt.hash;
       console.log(`✅ Approval confirmed: ${approvalTxHash}`);
+    } else {
+      console.log(
+        `✅ Sufficient allowance already exists: ${tool.formatToken(
+          allowance,
+          decimals
+        )}`
+      );
     }
 
     // Step 3: Create deposit
-    const depositId = await tool.createDeposit(tokenAddress, depositAmount, apyPercent);
+    console.log(
+      `Creating deposit: ${depositAmount} ${tokenSymbol} at ${apyPercent}% APY...`
+    );
+    const depositResult = await tool.createDeposit(
+      tokenAddress,
+      depositAmount,
+      apyPercent
+    );
+    const depositId = depositResult.depositId;
+    const depositTxHash = depositResult.transactionHash;
 
     // Step 4: Get current yield info
     const yieldInfo = await tool.getCurrentYield(parseInt(depositId));
@@ -2316,17 +3390,13 @@ app.post('/yield', async (req, res) => {
         yieldAmount: yieldAmount,
         principal: yieldInfo.principal,
         totalValue: totalValue,
-        tokenSymbol: yieldInfo.tokenSymbol
+        tokenSymbol: yieldInfo.tokenSymbol,
       });
     }
 
-    // Get deposit transaction hash (from createDeposit)
-    // Note: createDeposit returns depositId, but we can get tx info if needed
-    // For now, we'll return the deposit info
-
     return res.json({
       success: true,
-      message: 'Deposit created successfully',
+      message: "Deposit created successfully",
       deposit: {
         depositId: depositId,
         tokenAddress: tokenAddress,
@@ -2338,40 +3408,51 @@ app.post('/yield', async (req, res) => {
         currentYield: yieldInfo.yieldAmount,
         totalAmount: yieldInfo.totalAmount,
         daysPassed: yieldInfo.daysPassed,
-        active: yieldInfo.active
+        active: yieldInfo.active,
       },
       projections: projections,
       wallet: wallet.address,
-      approvalTransaction: approvalTxHash ? {
-        hash: approvalTxHash,
-        explorerUrl: `https://shannon-explorer.somnia.network/tx/${approvalTxHash}`
-      } : null,
-      yieldCalculatorAddress: yieldCalculatorAddress,
+      transactions: {
+        deposit: {
+          hash: depositTxHash,
+          explorerUrl: `https://sepolia.arbiscan.io/tx/${depositTxHash}`,
+        },
+        approval: approvalTxHash
+          ? {
+              hash: approvalTxHash,
+              explorerUrl: `https://sepolia.arbiscan.io/tx/${approvalTxHash}`,
+              note: "Token approval transaction",
+            }
+          : {
+              note: "Approval not needed - sufficient allowance already exists",
+              existingAllowance: tool.formatToken(allowance, decimals),
+            },
+      },
+      yieldCalculatorAddress: YIELD_CALCULATOR_ADDRESS,
       nextSteps: [
         `Your deposit is earning ${apyPercent}% APY`,
         `Use deposit ID ${depositId} to check yield or withdraw`,
-        `Projections show total value (principal + yield) for each time period`
-      ]
+        `Projections show total value (principal + yield) for each time period`,
+      ],
     });
-
   } catch (error) {
-    console.error('Yield deposit error:', error);
+    console.error("Yield deposit error:", error);
     return res.status(500).json({
       success: false,
       error: error.message,
-      details: error.reason || error.code
+      details: error.reason || error.code,
     });
   }
 });
 
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', network: 'Somnia Testnet' });
+app.get("/health", (req, res) => {
+  res.json({ status: "ok", network: "Arbitrum Sepolia" });
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-  console.log(`Network: Somnia Testnet`);
+  console.log(`Network: Arbitrum Sepolia`);
 });
 
 module.exports = app;
