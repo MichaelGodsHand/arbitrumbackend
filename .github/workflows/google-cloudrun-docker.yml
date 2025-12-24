@@ -6,9 +6,9 @@ on:
 env:
   PROJECT_ID: 'smart-arc-472207-n9'
   GAR_LOCATION: 'us-central1'
-  SERVICE: 'somniabackend'
+  SERVICE: 'arbitrumbackend'
   REGION: 'us-central1'
-  REPO_NAME: 'somniabackend'
+  REPO_NAME: 'arbitrumbackend'
 jobs:
   deploy:
     runs-on: 'ubuntu-latest'
@@ -34,8 +34,8 @@ jobs:
           
       - name: 'Build and Push Container'
         run: |-
-          docker build -t "${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/somniabackend:${{ github.sha }}" .
-          docker push "${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/somniabackend:${{ github.sha }}"
+          docker build -t "${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/arbitrumbackend:${{ github.sha }}" .
+          docker push "${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/arbitrumbackend:${{ github.sha }}"
           
       - name: 'Deploy to Cloud Run'
         id: deploy
@@ -43,7 +43,7 @@ jobs:
         with:
           service: '${{ env.SERVICE }}'
           region: '${{ env.REGION }}'
-          image: '${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/somniabackend:${{ github.sha }}'
+          image: '${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/arbitrumbackend:${{ github.sha }}'
           
       - name: 'Show output'
         run: echo "${{ steps.deploy.outputs.url }}"
