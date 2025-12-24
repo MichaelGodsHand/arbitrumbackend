@@ -285,11 +285,52 @@ app.post("/transfer", async (req, res) => {
       });
     }
 
-    // Validate address format
-    if (!ethers.isAddress(toAddress)) {
+    // Validate and normalize address format
+    let normalizedToAddress;
+    try {
+      // Trim whitespace first
+      const trimmedAddress = toAddress.trim();
+
+      // Basic format validation
+      if (!trimmedAddress.startsWith("0x") || trimmedAddress.length !== 42) {
+        return res.status(400).json({
+          success: false,
+          error: "Invalid recipient address format",
+          details:
+            "Address must start with 0x and be exactly 42 characters (0x + 40 hex chars)",
+        });
+      }
+
+      // Check if it's a valid hex string
+      const hexPattern = /^0x[a-fA-F0-9]{40}$/;
+      if (!hexPattern.test(trimmedAddress)) {
+        return res.status(400).json({
+          success: false,
+          error: "Invalid recipient address format",
+          details:
+            "Address must be a valid hex string (0x followed by 40 hex characters)",
+        });
+      }
+
+      // Try to normalize to checksummed address
+      // If checksum is incorrect, getAddress will fix it
+      try {
+        normalizedToAddress = ethers.getAddress(trimmedAddress);
+      } catch (checksumError) {
+        // If getAddress fails, try with lowercase (fixes checksum issues)
+        try {
+          normalizedToAddress = ethers.getAddress(trimmedAddress.toLowerCase());
+        } catch (lowercaseError) {
+          // If both fail, use the address as-is if it passed basic validation
+          // This handles edge cases where the address format is valid but checksum is problematic
+          normalizedToAddress = trimmedAddress.toLowerCase();
+        }
+      }
+    } catch (addressError) {
       return res.status(400).json({
         success: false,
         error: "Invalid recipient address format",
+        details: addressError.message,
       });
     }
 
@@ -318,17 +359,21 @@ app.post("/transfer", async (req, res) => {
 
     // If tokenAddress is provided, transfer ERC20 tokens
     if (tokenAddress) {
-      // Validate token address format
-      if (!ethers.isAddress(tokenAddress)) {
+      // Validate and normalize token address format
+      let normalizedTokenAddress;
+      try {
+        normalizedTokenAddress = ethers.getAddress(tokenAddress.trim());
+      } catch (tokenAddressError) {
         return res.status(400).json({
           success: false,
           error: "Invalid token address format",
+          details: tokenAddressError.message,
         });
       }
 
       console.log(
         "Transferring ERC20 token on Arbitrum Sepolia:",
-        tokenAddress
+        normalizedTokenAddress
       );
 
       // ERC20 Token ABI for transfer
@@ -341,7 +386,7 @@ app.post("/transfer", async (req, res) => {
       ];
 
       const tokenContract = new ethers.Contract(
-        tokenAddress,
+        normalizedTokenAddress,
         TOKEN_ABI,
         wallet
       );
@@ -372,7 +417,7 @@ app.post("/transfer", async (req, res) => {
         return res.status(400).json({
           success: false,
           error: "Insufficient token balance",
-          tokenAddress: tokenAddress,
+          tokenAddress: normalizedTokenAddress,
           tokenSymbol: tokenSymbol,
           currentBalance: ethers.formatUnits(tokenBalance, decimals),
           requestedAmount: amount.toString(),
@@ -384,7 +429,7 @@ app.post("/transfer", async (req, res) => {
       let gasLimit;
       try {
         gasEstimate = await tokenContract.transfer.estimateGas(
-          toAddress,
+          normalizedToAddress,
           amountInWei
         );
         // Add 20% buffer for Arbitrum
@@ -411,7 +456,7 @@ app.post("/transfer", async (req, res) => {
       }
 
       const tx = await tokenContract.transfer(
-        toAddress,
+        normalizedToAddress,
         amountInWei,
         txOptions
       );
@@ -426,8 +471,8 @@ app.post("/transfer", async (req, res) => {
         network: "Arbitrum Sepolia",
         transactionHash: receipt.hash,
         from: wallet.address,
-        to: toAddress,
-        tokenAddress: tokenAddress,
+        to: normalizedToAddress,
+        tokenAddress: normalizedTokenAddress,
         tokenName: tokenName,
         tokenSymbol: tokenSymbol,
         amount: amount,
@@ -462,7 +507,7 @@ app.post("/transfer", async (req, res) => {
     }
 
     // Check if recipient is a contract address
-    const code = await provider.getCode(toAddress);
+    const code = await provider.getCode(normalizedToAddress);
     const isContract = code && code !== "0x";
 
     if (isContract) {
@@ -470,7 +515,7 @@ app.post("/transfer", async (req, res) => {
       try {
         // Try to estimate gas with a small test amount to see if contract accepts native tokens
         await provider.estimateGas({
-          to: toAddress,
+          to: normalizedToAddress,
           value: 1n, // Test with 1 wei
           from: wallet.address,
         });
@@ -481,7 +526,7 @@ app.post("/transfer", async (req, res) => {
           error: "Cannot send native tokens to this contract address",
           details:
             "The recipient address is a contract that does not accept native token transfers. Use the tokenAddress parameter to transfer ERC20 tokens instead.",
-          recipientAddress: toAddress,
+          recipientAddress: normalizedToAddress,
           isContract: true,
           suggestion:
             "If you want to transfer tokens, include the 'tokenAddress' parameter in your request",
@@ -494,7 +539,7 @@ app.post("/transfer", async (req, res) => {
     let gasEstimate;
     try {
       gasEstimate = await provider.estimateGas({
-        to: toAddress,
+        to: normalizedToAddress,
         value: amountInWei,
         from: wallet.address,
       });
@@ -513,7 +558,7 @@ app.post("/transfer", async (req, res) => {
             "Transaction would fail - recipient cannot receive native tokens",
           details:
             "The recipient address may be a contract that rejects native token transfers, or there may be insufficient balance for gas fees.",
-          recipientAddress: toAddress,
+          recipientAddress: normalizedToAddress,
           isContract: isContract,
           suggestion: isContract
             ? "If transferring tokens, use the 'tokenAddress' parameter. If sending to a contract, ensure it has a payable receive() or fallback() function."
@@ -526,7 +571,7 @@ app.post("/transfer", async (req, res) => {
     }
 
     const tx = {
-      to: toAddress,
+      to: normalizedToAddress,
       value: amountInWei,
     };
 
@@ -546,7 +591,7 @@ app.post("/transfer", async (req, res) => {
         network: "Arbitrum Sepolia",
         transactionHash: receipt.hash,
         from: wallet.address,
-        to: toAddress,
+        to: normalizedToAddress,
         amount: amount,
         amountWei: amountInWei.toString(),
         blockNumber: receipt.blockNumber,
@@ -563,7 +608,7 @@ app.post("/transfer", async (req, res) => {
             "Transaction reverted - recipient cannot receive native tokens",
           details:
             "The recipient contract does not accept native token transfers.",
-          recipientAddress: toAddress,
+          recipientAddress: normalizedToAddress,
           suggestion:
             "Use the 'tokenAddress' parameter to transfer ERC20 tokens instead",
           network: "Arbitrum Sepolia",
@@ -581,7 +626,7 @@ app.post("/transfer", async (req, res) => {
         error: "Transaction would fail",
         details:
           "The transaction would revert. This usually means the recipient cannot receive native tokens or there's insufficient balance.",
-        recipientAddress: toAddress,
+        recipientAddress: normalizedToAddress,
         suggestion:
           "If sending to a contract, ensure it accepts native tokens. If transferring tokens, use the 'tokenAddress' parameter.",
         network: "Arbitrum Sepolia",
